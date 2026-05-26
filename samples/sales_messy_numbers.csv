@@ -1,0 +1,6 @@
+date,region,product,revenue,profit,units
+2026-01-01,North,Analytics,"$1,200.50"," 300.00 ",10
+2026-02-01,South,Analytics,"$2,450.00","(120.75)",15
+2026-03-01,North,Automation,"$3,100.25"," 500.50 ",20
+2026-04-01,West,Automation,"$4,880.00","$900.25",28
+2026-05-01,East,Insights,"$5,220.75","$1,100.00",31

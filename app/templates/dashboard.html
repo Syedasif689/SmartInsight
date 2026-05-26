@@ -1,0 +1,459 @@
+{% extends "base.html" %}
+
+{% block title %}SmartInsight Dashboard Generator{% endblock %}
+
+{% block content %}
+
+<div class="dashboard-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+
+    <div class="brand-mark">
+      SI
+    </div>
+
+    <div>
+      <p class="eyebrow">SmartInsight</p>
+      <h1>Dashboard Generator</h1>
+    </div>
+
+    <nav class="sidebar-nav">
+
+      <a href="#upload">Upload</a>
+
+      <a href="#kpis">KPIs</a>
+
+      <a href="#charts">Charts</a>
+
+      <a href="#insights">Insights</a>
+
+      <a href="#summary">Summary</a>
+
+      <a href="#data-preview">Data Preview</a>
+
+      <a href="{{ url_for('dashboard.history') }}">
+        History
+      </a>
+
+    </nav>
+
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <div class="dashboard-content">
+
+    <div class="dashboard-main">
+
+      <!-- HERO SECTION -->
+      <section class="hero-panel" id="upload">
+
+        <div>
+
+          <p class="eyebrow">
+            CSV and Excel Analytics
+          </p>
+
+          <h2>
+            Transform raw datasets into
+            professional dashboards.
+          </h2>
+
+          <p class="lede">
+            Upload CSV or Excel files and SmartInsight
+            automatically generates KPIs, charts,
+            insights, trends, and visual analytics.
+          </p>
+
+        </div>
+
+        <form
+          class="upload-card"
+          action="{{ url_for('dashboard.upload_file') }}"
+          method="post"
+          enctype="multipart/form-data"
+        >
+
+          <label for="dataset">
+            Upload Dataset
+          </label>
+
+          <input
+            id="dataset"
+            name="dataset"
+            type="file"
+            accept=".csv,.xls,.xlsx"
+            required
+          >
+
+          <button type="submit">
+            Generate Dashboard
+          </button>
+
+          {% if error %}
+            <p class="form-error">
+              {{ error }}
+            </p>
+          {% endif %}
+
+        </form>
+
+      </section>
+
+      {% if dashboard %}
+
+      <!-- DATASET HEADER -->
+      <section class="section-heading">
+
+        <div>
+
+          <p class="eyebrow">
+            Analyzed File
+          </p>
+
+          <h2>
+            {{ dashboard.title }}
+          </h2>
+
+        </div>
+
+        <div class="dataset-meta">
+
+          <span>
+            {{ dashboard.shape.rows }} Rows
+          </span>
+
+          <span>
+            {{ dashboard.shape.columns }} Columns
+          </span>
+
+          {% if dashboard.analysis and dashboard.analysis.sampled %}
+
+          <span>
+            Fast analysis: {{ dashboard.analysis.sample_rows }} Rows
+          </span>
+
+          {% endif %}
+
+        </div>
+
+      </section>
+
+      <!-- KPI SECTION -->
+      <section class="kpi-grid" id="kpis">
+
+        {% for kpi in dashboard.kpis %}
+
+        <article class="metric-card reveal">
+
+          <p class="metric-label">
+            {{ kpi.label }}
+          </p>
+
+          <strong class="metric-value">
+            {{ kpi.value }}
+          </strong>
+
+          <span class="metric-trend">
+            {{ kpi.hint }}
+          </span>
+
+        </article>
+
+        {% endfor %}
+
+      </section>
+
+      <!-- CHARTS -->
+      <section class="dashboard-main" id="charts">
+
+        {% set charts = chart_data or dashboard.chart_data %}
+
+        <!-- CHART GRID -->
+        <section class="chart-grid">
+
+          {% for chart in charts %}
+
+          <article class="
+            chart-panel
+            {% if 'correlation' in chart.title|lower %}
+              correlation-panel
+            {% endif %}
+            reveal
+          ">
+
+            <div class="chart-panel-header">
+
+              <h3 class="chart-title">
+                {{ chart.title }}
+              </h3>
+
+            </div>
+
+            <div class="chart-canvas-wrap">
+
+              {% if
+                chart.points and chart.points|length > 0
+                or chart.labels and chart.labels|length > 0
+                or chart.matrix and chart.matrix|length > 0
+              %}
+
+                <canvas
+                  data-chart-id="{{ chart.id }}"
+                ></canvas>
+
+              {% else %}
+
+                <div class="chart-empty">
+
+                  {{ chart.empty_message
+                    or "No chart data available." }}
+
+                </div>
+
+              {% endif %}
+
+            </div>
+
+          </article>
+
+          {% endfor %}
+
+        </section>
+
+      </section>
+
+      <!-- JSON DATA -->
+      <script
+        id="chart-data"
+        type="application/json"
+      >
+        {{ charts | tojson }}
+      </script>
+
+      <script
+        id="detected-columns"
+        type="application/json"
+      >
+        {{ dashboard.columns | tojson }}
+      </script>
+
+      <!-- INSIGHTS -->
+      <section
+        class="content-grid two-column"
+        id="insights"
+      >
+
+        <!-- INSIGHTS PANEL -->
+        <article class="panel reveal">
+
+          <h3>
+            Intelligent Insights
+          </h3>
+
+          <ul class="insight-list">
+
+            {% for insight in dashboard.insights %}
+
+            <li>
+              {{ insight }}
+            </li>
+
+            {% endfor %}
+
+          </ul>
+
+        </article>
+
+        <!-- DETECTED COLUMNS -->
+        <article class="panel reveal">
+
+          <h3>
+            Detected Columns
+          </h3>
+
+          <div class="column-groups">
+
+            <div>
+
+              <span>Numeric</span>
+
+              <strong>
+                {{ dashboard.columns.numeric
+                | join(", ")
+                or "None" }}
+              </strong>
+
+            </div>
+
+            <div>
+
+              <span>Categorical</span>
+
+              <strong>
+                {{ dashboard.columns.categorical
+                | join(", ")
+                or "None" }}
+              </strong>
+
+            </div>
+
+            <div>
+
+              <span>Date</span>
+
+              <strong>
+                {{ dashboard.columns.date
+                | join(", ")
+                or "None" }}
+              </strong>
+
+            </div>
+
+          </div>
+
+        </article>
+
+      </section>
+
+      <!-- SUMMARY TABLE -->
+      {% if dashboard.summary_statistics %}
+
+      <section
+        class="panel reveal"
+        id="summary"
+      >
+
+        <h3>
+          Summary Statistics
+        </h3>
+
+        <div class="table-wrap">
+
+          <table>
+
+            <thead>
+
+              <tr>
+
+                {% for heading in dashboard.summary_statistics[0].keys() %}
+
+                <th>
+                  {{ heading }}
+                </th>
+
+                {% endfor %}
+
+              </tr>
+
+            </thead>
+
+            <tbody>
+
+              {% for row in dashboard.summary_statistics %}
+
+              <tr>
+
+                {% for value in row.values() %}
+
+                <td>
+                  {{ value }}
+                </td>
+
+                {% endfor %}
+
+              </tr>
+
+              {% endfor %}
+
+            </tbody>
+
+          </table>
+
+        </div>
+
+      </section>
+
+      {% endif %}
+
+      <!-- DATA PREVIEW -->
+      <section
+        class="panel reveal"
+        id="data-preview"
+      >
+
+        <h3>
+          Data Preview
+        </h3>
+
+        <div class="table-wrap">
+
+          <table>
+
+            <thead>
+
+              <tr>
+
+                {% for column in dashboard.preview.columns %}
+
+                <th>
+                  {{ column }}
+                </th>
+
+                {% endfor %}
+
+              </tr>
+
+            </thead>
+
+            <tbody>
+
+              {% for row in dashboard.preview.rows %}
+
+              <tr>
+
+                {% for column in dashboard.preview.columns %}
+
+                <td>
+                  {{ row[column] }}
+                </td>
+
+                {% endfor %}
+
+              </tr>
+
+              {% endfor %}
+
+            </tbody>
+
+          </table>
+
+        </div>
+
+      </section>
+
+      {% else %}
+
+      <!-- EMPTY STATE -->
+      <section class="empty-state">
+
+        <h2>
+          No dataset analyzed yet
+        </h2>
+
+        <p>
+          Upload a CSV or Excel file to generate
+          KPIs, charts, statistics, and insights.
+        </p>
+
+      </section>
+
+      {% endif %}
+
+    </div>
+
+  </div>
+
+</div>
+
+{% endblock %}

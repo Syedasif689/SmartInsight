@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}
+SmartInsight Upload History
+{% endblock %}
+
+{% block content %}
+
+<div class="dashboard-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+
+    <div class="brand-mark">
+      SI
+    </div>
+
+    <div>
+
+      <p class="eyebrow">
+        SmartInsight
+      </p>
+
+      <h1>
+        Upload History
+      </h1>
+
+    </div>
+
+    <nav
+      class="sidebar-nav"
+      aria-label="History navigation"
+    >
+
+      <a href="{{ url_for('dashboard.index') }}">
+        Dashboard
+      </a>
+
+      <a href="{{ url_for('dashboard.history') }}">
+        History
+      </a>
+
+    </nav>
+
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <div class="dashboard-content">
+
+    <div class="dashboard-main">
+
+      <!-- PAGE HEADER -->
+      <section class="section-heading">
+
+        <div>
+
+          <p class="eyebrow">
+            Saved Dashboards
+          </p>
+
+          <h2>
+            Upload History
+          </h2>
+
+        </div>
+
+        <a
+          class="button-link"
+          href="{{ url_for('dashboard.index') }}"
+        >
+          Upload New File
+        </a>
+
+      </section>
+
+      <!-- HISTORY GRID -->
+      {% if uploads %}
+
+      <section class="history-grid">
+
+        {% for upload in uploads %}
+
+        <article class="history-dashboard-card reveal">
+
+          <!-- TOP -->
+          <div class="history-card-top">
+
+            <div class="history-file-icon">
+              📊
+            </div>
+
+            <div class="history-file-info">
+
+              <p class="history-date">
+                {{ upload.uploaded_at }}
+              </p>
+
+              <h3 class="history-title">
+                {{ upload.name }}
+              </h3>
+
+            </div>
+
+          </div>
+
+          <!-- BODY -->
+          <div class="history-card-body">
+
+            <div class="history-stat">
+
+              <span class="history-stat-label">
+                File Size
+              </span>
+
+              <strong>
+                {{ upload.size }}
+              </strong>
+
+            </div>
+
+            {% if upload.rows %}
+            <div class="history-stat">
+
+              <span class="history-stat-label">
+                Rows
+              </span>
+
+              <strong>
+                {{ upload.rows }}
+              </strong>
+
+            </div>
+            {% endif %}
+
+            {% if upload.columns %}
+            <div class="history-stat">
+
+              <span class="history-stat-label">
+                Columns
+              </span>
+
+              <strong>
+                {{ upload.columns }}
+              </strong>
+
+            </div>
+            {% endif %}
+
+          </div>
+
+          <!-- FOOTER -->
+          <div class="history-card-footer">
+
+            <a
+              class="button-link"
+              href="{{ upload.dashboard_url }}"
+            >
+              View Dashboard
+            </a>
+
+          </div>
+
+        </article>
+
+        {% endfor %}
+
+      </section>
+
+      {% else %}
+
+      <!-- EMPTY -->
+      <section class="empty-state">
+
+        <h2>
+          No uploads yet
+        </h2>
+
+        <p>
+          Upload a CSV or Excel file
+          to generate your first dashboard.
+        </p>
+
+      </section>
+
+      {% endif %}
+
+    </div>
+
+  </div>
+
+</div>
+
+{% endblock %}

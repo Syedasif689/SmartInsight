@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+
+  <!-- =========================
+       META
+  ========================== -->
+
+  <meta charset="utf-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  >
+
+  <meta
+    http-equiv="X-UA-Compatible"
+    content="IE=edge"
+  >
+
+  <meta
+    name="theme-color"
+    content="#0f172a"
+  >
+
+  <meta
+    name="description"
+    content="SmartInsight AI Dashboard Generator"
+  >
+
+  <title>
+    {% block title %}SmartInsight{% endblock %}
+  </title>
+
+  <!-- =========================
+       GOOGLE FONTS
+  ========================== -->
+
+  <link
+    rel="preconnect"
+    href="https://fonts.googleapis.com"
+  >
+
+  <link
+    rel="preconnect"
+    href="https://fonts.gstatic.com"
+    crossorigin
+  >
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  >
+
+  <!-- =========================
+       PRELOAD CSS
+  ========================== -->
+
+  <link
+    rel="preload"
+    href="{{ url_for('static', filename='css/main.css') }}"
+    as="style"
+  >
+
+  <!-- =========================
+       MAIN CSS
+  ========================== -->
+
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='css/main.css') }}"
+  >
+
+  <!-- =========================
+       FAVICON
+  ========================== -->
+
+  <link
+    rel="icon"
+    href="{{ url_for('static', filename='favicon.ico') }}"
+  >
+
+  <!-- =========================
+       APPLE MOBILE SUPPORT
+  ========================== -->
+
+  <meta
+    name="apple-mobile-web-app-capable"
+    content="yes"
+  >
+
+  <meta
+    name="apple-mobile-web-app-status-bar-style"
+    content="black-translucent"
+  >
+
+  <!-- =========================
+       CHART.JS
+  ========================== -->
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/chart.js"
+    defer
+  ></script>
+
+</head>
+
+<body>
+
+  <!-- =========================
+       APP SHELL
+  ========================== -->
+
+  <main class="app-shell">
+
+    {% block content %}
+    {% endblock %}
+
+  </main>
+
+  <!-- =========================
+       DASHBOARD JS
+  ========================== -->
+
+  <script
+    src="{{ url_for('static', filename='js/dashboard.js') }}"
+    defer
+  ></script>
+
+</body>
+
+</html>
