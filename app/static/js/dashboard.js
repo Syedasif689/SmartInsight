@@ -237,10 +237,6 @@ function chartOptions(chart) {
     },
   };
 
-  /* =========================
-     PIE / DOUGHNUT
-  ========================= */
-
   if (isCircular) {
     return {
       ...baseOptions,
@@ -290,10 +286,6 @@ function chartOptions(chart) {
     };
   }
 
-  /* =========================
-     SCATTER
-  ========================= */
-
   if (chart.type === "scatter") {
     return {
       ...baseOptions,
@@ -306,7 +298,7 @@ function chartOptions(chart) {
           },
 
           grid: {
-            color: "#eef2f6",
+            color: "#1a2a1a",
           },
         },
 
@@ -317,16 +309,12 @@ function chartOptions(chart) {
           },
 
           grid: {
-            color: "#eef2f6",
+            color: "#1a2a1a",
           },
         },
       },
     };
   }
-
-  /* =========================
-     BAR / LINE
-  ========================= */
 
   return {
     ...baseOptions,
@@ -338,7 +326,7 @@ function chartOptions(chart) {
         },
 
         ticks: {
-          color: "#667085",
+          color: "#a0a0a0",
         },
       },
 
@@ -346,11 +334,11 @@ function chartOptions(chart) {
         beginAtZero: true,
 
         ticks: {
-          color: "#667085",
+          color: "#a0a0a0",
         },
 
         grid: {
-          color: "#eef2f6",
+          color: "#1a2a1a",
         },
       },
     },
@@ -543,27 +531,318 @@ function renderChart(chart) {
 }
 
 /* =========================
+   MODERN UPLOAD HANDLER
+========================= */
+
+class ModernUploader {
+  constructor() {
+    this.dropzone = document.getElementById('dropzone');
+    this.fileInput = document.getElementById('fileInput');
+    this.uploadBtn = document.getElementById('uploadBtn');
+    this.filePreview = document.querySelector('.file-preview');
+    this.uploadProgress = document.querySelector('.upload-progress-modern');
+    this.fileName = document.querySelector('.file-name');
+    this.fileSize = document.querySelector('.file-size');
+    this.progressFill = document.querySelector('.progress-fill');
+    this.progressText = document.querySelector('.progress-text');
+    
+    this.selectedFile = null;
+    this.init();
+  }
+  
+  init() {
+    // Click to browse
+    if (this.dropzone) {
+      this.dropzone.addEventListener('click', (e) => {
+        // Don't trigger if clicking on remove button
+        if (e.target.classList.contains('remove-file')) return;
+        this.fileInput.click();
+      });
+    }
+    
+    // Browse link click
+    const browseLink = document.querySelector('.browse-link');
+    if (browseLink) {
+      browseLink.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.fileInput.click();
+      });
+    }
+    
+    // File selection
+    if (this.fileInput) {
+      this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e.target.files[0]));
+    }
+    
+    // Drag & drop events
+    if (this.dropzone) {
+      this.dropzone.addEventListener('dragover', (e) => this.handleDragOver(e));
+      this.dropzone.addEventListener('dragleave', () => this.handleDragLeave());
+      this.dropzone.addEventListener('drop', (e) => this.handleDrop(e));
+    }
+    
+    // Remove file
+    const removeBtn = document.querySelector('.remove-file');
+    if (removeBtn) {
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.removeFile();
+      });
+    }
+    
+    // Upload button
+    if (this.uploadBtn) {
+      this.uploadBtn.addEventListener('click', () => this.uploadFile());
+    }
+  }
+  
+  handleFileSelect(file) {
+    if (!file) return;
+    
+    console.log('File selected:', file.name);
+    
+    // Validate file type
+    const validExtensions = ['csv', 'xlsx', 'xls'];
+    const fileExt = file.name.split('.').pop().toLowerCase();
+    
+    if (!validExtensions.includes(fileExt)) {
+      this.showError('Please upload CSV or Excel files only');
+      return;
+    }
+    
+    // Validate size (50MB max)
+    if (file.size > 50 * 1024 * 1024) {
+      this.showError('File size must be less than 50MB');
+      return;
+    }
+    
+    this.selectedFile = file;
+    this.showPreview(file);
+    if (this.uploadBtn) this.uploadBtn.disabled = false;
+  }
+  
+  handleDragOver(e) {
+    e.preventDefault();
+    if (this.dropzone) this.dropzone.classList.add('drag-over');
+  }
+  
+  handleDragLeave() {
+    if (this.dropzone) this.dropzone.classList.remove('drag-over');
+  }
+  
+  handleDrop(e) {
+    e.preventDefault();
+    if (this.dropzone) this.dropzone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    this.handleFileSelect(file);
+  }
+  
+  showPreview(file) {
+    const uploadIcon = document.querySelector('.upload-icon');
+    const uploadText = document.querySelector('.upload-text');
+    
+    if (uploadIcon) uploadIcon.style.display = 'none';
+    if (uploadText) uploadText.style.display = 'none';
+    if (this.filePreview) this.filePreview.style.display = 'block';
+    
+    if (this.fileName) this.fileName.textContent = file.name;
+    if (this.fileSize) this.fileSize.textContent = this.formatFileSize(file.size);
+  }
+  
+  removeFile() {
+    this.selectedFile = null;
+    if (this.fileInput) this.fileInput.value = '';
+    if (this.uploadBtn) this.uploadBtn.disabled = true;
+    
+    if (this.filePreview) this.filePreview.style.display = 'none';
+    
+    const uploadIcon = document.querySelector('.upload-icon');
+    const uploadText = document.querySelector('.upload-text');
+    
+    if (uploadIcon) uploadIcon.style.display = 'block';
+    if (uploadText) uploadText.style.display = 'block';
+    if (this.uploadProgress) this.uploadProgress.style.display = 'none';
+  }
+  
+  async uploadFile() {
+    if (!this.selectedFile) return;
+    
+    console.log('Uploading file:', this.selectedFile.name);
+    
+    if (this.uploadProgress) this.uploadProgress.style.display = 'block';
+    if (this.uploadBtn) {
+      this.uploadBtn.disabled = true;
+      this.uploadBtn.innerHTML = `<span>Uploading...</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>`;
+    }
+    
+    const formData = new FormData();
+    formData.append('dataset', this.selectedFile);
+    
+    try {
+      // Simulate progress
+      await this.simulateUpload();
+      
+      // Send to server - use the correct endpoint
+      const response = await fetch('/upload', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (response.ok) {
+        this.uploadSuccess();
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      } else {
+        const error = await response.json();
+        this.uploadError(error.error || 'Upload failed');
+      }
+      
+    } catch (error) {
+      console.error('Upload error:', error);
+      this.uploadError('Failed to upload file. Please try again.');
+    }
+  }
+  
+  simulateUpload() {
+    return new Promise((resolve) => {
+      let progress = 0;
+      const interval = setInterval(() => {
+        progress += 10;
+        this.updateProgress(progress);
+        if (progress >= 100) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, 150);
+    });
+  }
+  
+  updateProgress(percent) {
+    if (this.progressFill) this.progressFill.style.width = `${percent}%`;
+    if (this.progressText) {
+      if (percent < 100) {
+        this.progressText.textContent = `Uploading... ${percent}%`;
+      } else {
+        this.progressText.textContent = 'Processing data...';
+      }
+    }
+  }
+  
+  uploadSuccess() {
+    if (this.progressText) this.progressText.textContent = '✓ Upload Complete! Loading dashboard...';
+    if (this.progressFill) this.progressFill.style.width = '100%';
+    if (this.dropzone) this.dropzone.classList.add('upload-success-animation');
+  }
+  
+  uploadError(message) {
+    if (this.progressText) this.progressText.textContent = `✗ Error: ${message}`;
+    if (this.progressFill) this.progressFill.style.background = '#ff4444';
+    this.showError(message);
+    
+    setTimeout(() => {
+      this.resetUploader();
+    }, 3000);
+  }
+  
+  resetUploader() {
+    if (this.uploadProgress) this.uploadProgress.style.display = 'none';
+    if (this.uploadBtn) {
+      this.uploadBtn.disabled = false;
+      this.uploadBtn.innerHTML = `<span>Analyze Dataset</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12H19M12 5L19 12L12 19"/></svg>`;
+    }
+    this.removeFile();
+    if (this.progressFill) {
+      this.progressFill.style.background = '';
+      this.progressFill.style.width = '0%';
+    }
+  }
+  
+  showError(message) {
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'toast-error';
+    errorDiv.textContent = message;
+    document.body.appendChild(errorDiv);
+    setTimeout(() => errorDiv.remove(), 3000);
+  }
+  
+  formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+}
+
+/* =========================
+   SMOOTH SCROLLING ENHANCEMENTS
+========================= */
+
+function initSmoothScroll() {
+  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function (e) {
+      e.preventDefault();
+      const target = document.querySelector(this.getAttribute('href'));
+      if (target) {
+        target.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+          inline: 'nearest'
+        });
+      }
+    });
+  });
+}
+
+window.scrollToTop = function() {
+  window.scrollTo({
+    top: 0,
+    behavior: 'smooth'
+  });
+};
+
+function initScrollDetection() {
+  window.addEventListener('scroll', () => {
+    const scrollPosition = window.scrollY;
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) {
+      if (scrollPosition > 100) {
+        sidebar.classList.add('scrolled');
+      } else {
+        sidebar.classList.remove('scrolled');
+      }
+    }
+  });
+}
+
+/* =========================
    PAGE INIT
 ========================= */
 
 document.addEventListener("DOMContentLoaded", () => {
+  // Read detected columns
   readDetectedColumns();
 
+  // Initialize chart data
   const chartData = readJsonScript("#chart-data", []);
 
   console.log("[SmartInsight] Raw chart data:", chartData);
 
   if (!chartData.length) {
     console.warn("[SmartInsight] No chart data available.");
-    return;
+  } else {
+    const filteredCharts = filterCharts(chartData);
+    console.log("[SmartInsight] Final charts:", filteredCharts);
+    filteredCharts.forEach(renderChart);
   }
 
-  const filteredCharts = filterCharts(chartData);
+  // Initialize smooth scrolling features
+  initSmoothScroll();
+  initScrollDetection();
 
-  console.log(
-    "[SmartInsight] Final charts:",
-    filteredCharts
-  );
+  // Initialize modern uploader
+  new ModernUploader();
 
-  filteredCharts.forEach(renderChart);
+  console.log("[SmartInsight] All features initialized");
 });

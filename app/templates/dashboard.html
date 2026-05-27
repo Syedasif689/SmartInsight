@@ -45,59 +45,66 @@
 
     <div class="dashboard-main">
 
-      <!-- HERO SECTION -->
-      <section class="hero-panel" id="upload">
-
+      <!-- =========================
+           HERO SECTION (Text only, no upload card)
+      ========================= -->
+      <section class="hero-panel" id="hero">
         <div>
-
-          <p class="eyebrow">
-            CSV and Excel Analytics
-          </p>
-
-          <h2>
-            Transform raw datasets into
-            professional dashboards.
-          </h2>
-
-          <p class="lede">
-            Upload CSV or Excel files and SmartInsight
-            automatically generates KPIs, charts,
-            insights, trends, and visual analytics.
-          </p>
-
+          <p class="eyebrow">Data Analytics</p>
+          
+          <h2>Transform raw datasets into professional dashboards.</h2>
+          
+          <p class="lede">Upload CSV or Excel files and SmartInsight automatically generates KPIs, charts, insights, trends, and visual analytics.</p>
         </div>
+      </section>
 
-        <form
-          class="upload-card"
-          action="{{ url_for('dashboard.upload_file') }}"
-          method="post"
-          enctype="multipart/form-data"
-        >
-
-          <label for="dataset">
-            Upload Dataset
-          </label>
-
-          <input
-            id="dataset"
-            name="dataset"
-            type="file"
-            accept=".csv,.xls,.xlsx"
-            required
-          >
-
-          <button type="submit">
-            Generate Dashboard
+      <!-- =========================
+           MODERN UPLOAD CARD (Below Hero - Separate Section)
+      ========================= -->
+      <section class="upload-section" id="upload">
+        <div class="upload-card-modern">
+          <div class="dropzone" id="dropzone">
+            <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" hidden />
+            
+            <div class="upload-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M12 16V4M8 8L12 4L16 8" />
+                <path d="M4 16V20H20V16" />
+              </svg>
+            </div>
+            
+            <div class="upload-text">
+              <h3>Drop your file here</h3>
+              <p>or <span class="browse-link">browse</span> from your computer</p>
+              <small>Supports CSV, Excel (Max 50MB)</small>
+            </div>
+            
+            <div class="file-preview" style="display: none;">
+              <div class="file-info">
+                <div class="file-icon-large">📄</div>
+                <div class="file-details">
+                  <span class="file-name"></span>
+                  <span class="file-size"></span>
+                </div>
+                <button class="remove-file">✕</button>
+              </div>
+            </div>
+          </div>
+          
+          <div class="upload-progress-modern" style="display: none;">
+            <div class="progress-bar">
+              <div class="progress-fill"></div>
+            </div>
+            <span class="progress-text">Uploading...</span>
+          </div>
+          
+          <button class="upload-btn" id="uploadBtn" disabled>
+            <span>Analyze Dataset</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12H19M12 5L19 12L12 19" />
+            </svg>
           </button>
-
-          {% if error %}
-            <p class="form-error">
-              {{ error }}
-            </p>
-          {% endif %}
-
-        </form>
-
+        </div>
       </section>
 
       {% if dashboard %}
