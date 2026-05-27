@@ -232,47 +232,96 @@ button:hover, .button-link:hover {
 }
 
 /* =========================
-   HERO PANEL - FULLY RESPONSIVE
+   HERO PANEL WITH REAL IMAGE
 ========================= */
 
 .hero-panel {
-  display: block;
-  padding: clamp(20px, 5vw, 40px);
-  background: rgba(10, 10, 10, 0.75);
-  backdrop-filter: blur(12px);
+  position: relative;
+  overflow: hidden;
+
+  padding: clamp(28px, 5vw, 48px);
+
   border-radius: var(--radius);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
+
+  min-height: 360px;
+
+  display: flex;
+  align-items: center;
+
+  background:
+    linear-gradient(
+      rgba(0, 0, 0, 0.72),
+      rgba(0, 0, 0, 0.78)
+    ),
+    url("/static/images/dashboard-bg.jpg");
+
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  border: 1px solid rgba(0,255,136,0.18);
+
+  box-shadow:
+    0 10px 40px rgba(0,255,136,0.12);
+
+  isolation: isolate;
+}
+
+/* glow overlay */
+
+.hero-panel::before {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(0,255,136,0.22),
+      transparent 35%
+    );
+
+  z-index: 0;
+}
+
+/* content above image */
+
+.hero-panel > * {
+  position: relative;
+  z-index: 2;
 }
 
 .hero-panel h2 {
-  margin: 0 0 16px 0;
-  font-size: clamp(1.5rem, 5vw, 3rem);
-  line-height: 1.2;
-  color: #00ff88;
-}
+  color: #ffffff;
 
-.hero-panel .eyebrow {
-  margin: 0 0 12px;
-  color: var(--primary);
-  font-size: clamp(0.75rem, 2vw, 0.85rem);
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  font-size: clamp(2rem, 5vw, 4rem);
+
+  max-width: 760px;
+
+  line-height: 1.1;
+
+  margin: 0 0 18px;
 }
 
 .hero-panel .lede {
-  margin-top: 16px;
-  color: var(--muted);
-  line-height: 1.6;
-  font-size: clamp(0.85rem, 2.5vw, 1rem);
+  max-width: 680px;
+
+  color: rgba(255,255,255,0.82);
+
+  font-size: 1rem;
+
+  line-height: 1.8;
 }
 
-/* Remove the grid layout completely */
-@media (max-width: 980px) {
-  .hero-panel {
-    grid-template-columns: 1fr !important;
-  }
+.hero-panel .eyebrow {
+  color: #00ff88;
+
+  font-weight: 800;
+
+  letter-spacing: 1px;
+
+  margin-bottom: 14px;
 }
 /* =========================
    MODERN UPLOAD CARD
@@ -925,4 +974,98 @@ tbody tr:hover {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+/* =========================
+   AUTH UI
+========================= */
+
+.sidebar-auth {
+  margin-top: auto;
+
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  background: rgba(0,255,136,0.08);
+
+  border: 1px solid rgba(0,255,136,0.15);
+
+  padding: 12px;
+
+  border-radius: 14px;
+}
+
+.user-avatar {
+  width: 48px;
+  height: 48px;
+
+  border-radius: 50%;
+
+  object-fit: cover;
+
+  border: 2px solid #00ff88;
+}
+
+.user-profile strong {
+  display: block;
+
+  color: #00ff88;
+
+  font-size: 0.92rem;
+}
+
+.user-profile small {
+  color: #a0a0a0;
+
+  font-size: 0.72rem;
+
+  word-break: break-word;
+}
+
+.google-login-btn,
+.logout-btn {
+  width: 100%;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+
+  text-decoration: none;
+
+  padding: 12px 16px;
+
+  border-radius: 14px;
+
+  font-weight: 700;
+
+  transition: 0.3s ease;
+}
+
+.google-login-btn {
+  background: #ffffff;
+
+  color: #111111;
+}
+
+.google-login-btn:hover {
+  transform: translateY(-2px);
+}
+
+.logout-btn {
+  background: rgba(255,68,68,0.15);
+
+  color: #ff6666;
+
+  border: 1px solid rgba(255,68,68,0.2);
+}
+
+.logout-btn:hover {
+  background: rgba(255,68,68,0.25);
 }

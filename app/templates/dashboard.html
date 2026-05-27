@@ -37,6 +37,62 @@
       </a>
 
     </nav>
+    <!-- AUTH SECTION -->
+
+<div class="sidebar-auth">
+
+  {% if session.get("user") %}
+
+    <div class="user-profile">
+
+      <img
+        src="{{ session['user']['picture'] }}"
+        alt="Profile"
+        class="user-avatar"
+      >
+
+      <div>
+
+        <strong>
+          {{ session['user']['name'] }}
+        </strong>
+
+        <small>
+          {{ session['user']['email'] }}
+        </small>
+
+      </div>
+
+    </div>
+
+    <a
+      href="{{ url_for('auth.logout') }}"
+      class="logout-btn"
+    >
+      Logout
+    </a>
+
+  {% else %}
+
+    <a
+      href="{{ url_for('auth.login') }}"
+      class="google-login-btn"
+    >
+
+      <img
+        src="https://www.svgrepo.com/show/475656/google-color.svg"
+        width="20"
+      >
+
+      <span>
+        Continue with Google
+      </span>
+
+    </a>
+
+  {% endif %}
+
+</div>
 
   </aside>
 
@@ -49,14 +105,35 @@
            HERO SECTION (Text only, no upload card)
       ========================= -->
       <section class="hero-panel" id="hero">
-        <div>
-          <p class="eyebrow">Data Analytics</p>
-          
-          <h2>Transform raw datasets into professional dashboards.</h2>
-          
-          <p class="lede">Upload CSV or Excel files and SmartInsight automatically generates KPIs, charts, insights, trends, and visual analytics.</p>
-        </div>
-      </section>
+
+  <div class="hero-content">
+
+    <p class="eyebrow">
+      Data Analytics
+    </p>
+
+    <h2>
+      Transform raw datasets into professional dashboards.
+    </h2>
+
+    <p class="lede">
+      Upload CSV or Excel files and SmartInsight automatically
+      generates KPIs, charts, insights, trends, and visual analytics.
+    </p>
+
+  </div>
+
+  <!-- HERO IMAGE -->
+  <div class="hero-graphic">
+
+    <img
+      src="{{ url_for('static', filename='images/dashboard-hero.png') }}"
+      alt=""
+      >
+
+  </div>
+
+</section>
 
       <!-- =========================
            MODERN UPLOAD CARD (Below Hero - Separate Section)
