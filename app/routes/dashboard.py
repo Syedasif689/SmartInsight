@@ -39,13 +39,16 @@ def index():
 
 @dashboard_bp.route("/history", methods=["GET"])
 def history():
+
+    if "user" not in session:
+        return redirect(url_for("auth.login"))
+
     uploads = get_uploaded_files()
 
     return render_template(
         "history.html",
         uploads=uploads,
     )
-
 
 # =========================================================
 # FILE UPLOAD
@@ -161,25 +164,36 @@ def analyze_file():
 @dashboard_bp.route("/dashboard/<file_id>", methods=["GET"])
 def view_dashboard(file_id: str):
 
+    # LOGIN CHECK
+    if "user" not in session:
+        return redirect(url_for("auth.login"))
+
     safe_file_id = secure_filename(file_id)
     file_path = uploaded_file_path(safe_file_id)
 
     if not file_path.exists():
+        current_app.logger.error(f"File missing: {file_path}")
         return render_template(
             "dashboard.html",
             dashboard=None,
             error="Uploaded file not found.",
         ), 404
 
-    dashboard = generate_dashboard_from_file(file_path)
+    try:
+        dashboard = generate_dashboard_from_file(file_path)
+    except Exception as e:
+        current_app.logger.error(f"Dashboard error: {str(e)}")
+        return render_template(
+            "dashboard.html",
+            dashboard=None,
+            error="Failed to generate dashboard.",
+        ), 500
 
     return render_template(
         "dashboard.html",
         dashboard=dashboard,
         chart_data=dashboard.get("chart_data", []),
     )
-
-
 # =========================================================
 # HELPERS
 # =========================================================
@@ -193,7 +207,7 @@ def is_allowed_file(filename: str) -> bool:
 
 def uploaded_file_path(file_id: str) -> Path:
     upload_folder = Path(current_app.config["UPLOAD_FOLDER"]).resolve()
-    safe_file_id = secure_filename(file_id)
+    safe_file_id = file_id
     return upload_folder / safe_file_id
 
 
