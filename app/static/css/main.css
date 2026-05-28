@@ -1069,3 +1069,20 @@ tbody tr:hover {
 .logout-btn:hover {
   background: rgba(255,68,68,0.25);
 }
+.login-warning{
+    background: rgba(16, 37, 66, 0.9);
+    color: #7cc7ff;
+    padding: 14px 18px;
+    border-radius: 14px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(124,199,255,0.25);
+    font-size: 15px;
+    text-align: center;
+}
+
+.login-btn{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-decoration:none;
+}

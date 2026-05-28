@@ -139,6 +139,13 @@
            MODERN UPLOAD CARD (Below Hero - Separate Section)
       ========================= -->
       <section class="upload-section" id="upload">
+        {% if not session.get("user") %}
+
+<div class="login-warning">
+  Please login with Google to upload and analyze datasets.
+</div>
+
+{% endif %}
         <div class="upload-card-modern">
           <div class="dropzone" id="dropzone">
             <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" hidden />
@@ -175,12 +182,24 @@
             <span class="progress-text">Uploading...</span>
           </div>
           
-          <button class="upload-btn" id="uploadBtn" disabled>
-            <span>Analyze Dataset</span>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M5 12H19M12 5L19 12L12 19" />
-            </svg>
-          </button>
+          {% if session.get("user") %}
+
+<button class="upload-btn" id="uploadBtn" disabled>
+  <span>Analyze Dataset</span>
+
+  <svg width="18" height="18" viewBox="0 0 24 24"
+       fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M5 12H19M12 5L19 12L12 19" />
+  </svg>
+</button>
+
+{% else %}
+
+<a href="{{ url_for('auth.login') }}" class="upload-btn login-btn">
+  Login with Google
+</a>
+
+{% endif %}
         </div>
       </section>
 

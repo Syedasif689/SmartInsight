@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}SmartInsight | AI Dashboard Generator{% endblock %}
+
+{% block content %}
+
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', filename='css/start.css') }}"
+>
+
+<section class="start-hero">
+
+    <div class="hero-overlay"></div>
+
+    <div class="start-container">
+
+        <div class="hero-left">
+
+            <p class="hero-tag">
+                AI Powered Analytics
+            </p>
+
+            <h1>
+                Transform Raw Data Into
+                <span>Beautiful Dashboards</span>
+            </h1>
+
+            <p class="hero-description">
+                Upload CSV or Excel datasets and instantly generate
+                KPIs, charts, insights, trends, and analytics dashboards
+                powered by SmartInsight.
+            </p>
+
+            <div class="hero-buttons">
+
+                <a href="{{ url_for('dashboard.index') }}" class="start-btn">
+    Start Now
+</a>
+
+                <a
+                    href="#features"
+                    class="start-btn secondary-btn"
+                >
+                    Explore Features
+                </a>
+
+            </div>
+
+        </div>
+
+        <div class="hero-right">
+
+            <div class="glass-card floating-card">
+
+                <div class="card-top">
+                    <span class="live-dot"></span>
+                    AI Analytics
+                </div>
+
+                <div class="stats-grid">
+
+                    <div class="mini-card">
+                        <h3>98%</h3>
+                        <p>Accuracy</p>
+                    </div>
+
+                    <div class="mini-card">
+                        <h3>24+</h3>
+                        <p>Charts</p>
+                    </div>
+
+                    <div class="mini-card">
+                        <h3>AI</h3>
+                        <p>Insights</p>
+                    </div>
+
+                    <div class="mini-card">
+                        <h3>Fast</h3>
+                        <p>Processing</p>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+<section class="features-section" id="features">
+
+    <div class="feature-box">
+        <h3>Automated KPIs</h3>
+        <p>Generate professional KPI cards instantly.</p>
+    </div>
+
+    <div class="feature-box">
+        <h3>Interactive Charts</h3>
+        <p>Visualize trends using modern analytics charts.</p>
+    </div>
+
+    <div class="feature-box">
+        <h3>AI Insights</h3>
+        <p>Get intelligent observations from your datasets.</p>
+    </div>
+
+</section>
+
+{% endblock %}

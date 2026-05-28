@@ -28,10 +28,9 @@ dashboard_bp = Blueprint("dashboard", __name__)
 # HOME
 # =========================================================
 
-@dashboard_bp.route("/", methods=["GET"])
+@dashboard_bp.route("/dashboard", methods=["GET"])
 def index():
     return render_template("dashboard.html", dashboard=None)
-
 
 # =========================================================
 # HISTORY PAGE
@@ -207,7 +206,7 @@ def is_allowed_file(filename: str) -> bool:
 
 def uploaded_file_path(file_id: str) -> Path:
     upload_folder = Path(current_app.config["UPLOAD_FOLDER"]).resolve()
-    safe_file_id = file_id
+    safe_file_id = secure_filename(file_id)
     return upload_folder / safe_file_id
 
 

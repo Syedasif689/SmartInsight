@@ -53,7 +53,9 @@ def create_app(config_name="default"):
     # BLUEPRINTS
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(auth_bp)
-
+    @app.route("/")
+    def home():
+        return render_template("start.html")
     # ERROR HANDLER
     @app.errorhandler(RequestEntityTooLarge)
     def handle_large_upload(error):
