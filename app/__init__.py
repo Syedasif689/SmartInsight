@@ -7,8 +7,7 @@ from urllib.parse import quote_plus
 from app.config import config_by_name
 from app.routes.dashboard import dashboard_bp
 from app.routes.auth import auth_bp
-from app.extensions import db, migrate, oauth
-
+from app.extensions import db, migrate, oauth, mail
 load_dotenv()
 
 
@@ -40,6 +39,7 @@ def create_app(config_name="default"):
     db.init_app(app)
     migrate.init_app(app, db)
     oauth.init_app(app)
+    mail.init_app(app)
 
     # GOOGLE REGISTER
     oauth.register(

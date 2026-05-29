@@ -1,0 +1,70 @@
+```html
+{% extends "base.html" %}
+
+{% block title %}My Uploads - SmartInsight{% endblock %}
+
+{% block content %}
+
+<div class="uploads-page">
+
+    <div class="uploads-header">
+        <h1>My Uploads</h1>
+        <p>View all datasets you uploaded.</p>
+    </div>
+
+    {% if uploads %}
+
+    <div class="uploads-grid">
+
+        {% for upload in uploads %}
+
+        <div class="upload-card">
+
+            <div class="upload-icon">
+                📊
+            </div>
+
+            <div class="upload-info">
+
+                <h3>
+                    {{ upload.filename }}
+                </h3>
+
+                <p>
+                    Uploaded:
+                    {{ upload.uploaded_at }}
+                </p>
+
+            </div>
+
+            <a
+                href="{{ url_for('dashboard.view_dashboard', file_id=upload.file_id) }}"
+                class="view-btn"
+            >
+                Open Dashboard
+            </a>
+
+        </div>
+
+        {% endfor %}
+
+    </div>
+
+    {% else %}
+
+    <div class="empty-upload-state">
+
+        <h2>No uploads yet</h2>
+
+        <p>
+            Upload a dataset to generate your first dashboard.
+        </p>
+
+    </div>
+
+    {% endif %}
+
+</div>
+
+{% endblock %}
+```

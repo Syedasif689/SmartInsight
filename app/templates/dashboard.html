@@ -21,15 +21,11 @@
     <nav class="sidebar-nav">
 
       <a href="#upload">Upload</a>
-
-      <a href="#kpis">KPIs</a>
-
-      <a href="#charts">Charts</a>
-
-      <a href="#insights">Insights</a>
-
-      <a href="#summary">Summary</a>
-
+      
+      <a href="{{ url_for('dashboard.my_uploads') }}">
+      My Uploads
+      </a>
+      
       <a href="#data-preview">Data Preview</a>
 
       <a href="{{ url_for('dashboard.history') }}">
@@ -38,9 +34,9 @@
 
     </nav>
     <!-- AUTH SECTION -->
-
 <div class="sidebar-auth">
 
+  <!-- GOOGLE USER -->
   {% if session.get("user") %}
 
     <div class="user-profile">
@@ -62,7 +58,6 @@
         </small>
 
       </div>
-
     </div>
 
     <a
@@ -72,6 +67,40 @@
       Logout
     </a>
 
+  <!-- EMAIL USER -->
+  <!-- EMAIL USER -->
+{% elif session.get("email_user") %}
+
+<div class="user-profile">
+
+  <div class="email-avatar">
+    {{ session['email_user']['name'][0] }}
+  </div>
+
+  <div>
+
+    <strong>
+      {{ session['email_user']['name'] }}
+    </strong>
+
+    <small>
+      {{ session['email_user']['email'] }}
+    </small>
+
+  </div>
+
+</div>
+
+<a
+  href="{{ url_for('auth.logout') }}"
+  class="logout-btn"
+>
+  Logout
+</a>
+
+
+
+  <!-- NOT LOGGED IN -->
   {% else %}
 
     <a
@@ -90,9 +119,27 @@
 
     </a>
 
+    <button
+      class="email-login-btn"
+      onclick="openEmailModal()"
+    >
+
+      <img
+        src="https://cdn-icons-png.flaticon.com/512/561/561127.png"
+        width="20"
+      >
+
+      <span>
+        Continue with Email
+      </span>
+
+    </button>
+
   {% endif %}
 
 </div>
+
+
 
   </aside>
 
@@ -139,8 +186,7 @@
            MODERN UPLOAD CARD (Below Hero - Separate Section)
       ========================= -->
       <section class="upload-section" id="upload">
-        {% if not session.get("user") %}
-
+{% if not session.get("user") and not session.get("email_user") %}
 <div class="login-warning">
   Please login with Google to upload and analyze datasets.
 </div>
@@ -182,9 +228,8 @@
             <span class="progress-text">Uploading...</span>
           </div>
           
-          {% if session.get("user") %}
-
-<button class="upload-btn" id="uploadBtn" disabled>
+    {% if session.get("user") or session.get("email_user") %}
+    <button class="upload-btn" id="uploadBtn" disabled>
   <span>Analyze Dataset</span>
 
   <svg width="18" height="18" viewBox="0 0 24 24"
@@ -195,8 +240,14 @@
 
 {% else %}
 
-<a href="{{ url_for('auth.login') }}" class="upload-btn login-btn">
-  Login with Google
+<a href="{{ url_for('auth.login') }}" class="google-login-btn">
+  <img src="https://www.svgrepo.com/show/475656/google-color.svg" width="20">
+  <span>Continue with Google</span>
+</a>
+
+<a href="#" class="email-login-btn" onclick="openEmailModal()">
+  <img src="https://cdn-icons-png.flaticon.com/512/561/561127.png" width="20">
+  <span>continue with   Email </span>
 </a>
 
 {% endif %}
@@ -558,5 +609,124 @@
   </div>
 
 </div>
+<div id="emailModal" class="modal">
 
+  <div class="modal-content">
+
+    <h3>Login with Email</h3>
+
+    <form action="{{ url_for('auth.send_otp') }}" method="POST">
+
+      <input 
+        type="email" 
+        name="email" 
+        placeholder="Enter your email"
+        required
+      >
+
+      <button type="submit">
+        Send OTP
+      </button>
+
+    </form>
+
+    <button onclick="closeEmailModal()" class="close-btn">
+      Close
+    </button>
+
+  </div>
+
+</div>
+<script>
+function openEmailModal() {
+  document.getElementById("emailModal").classList.add("show");
+}
+
+function closeEmailModal() {
+  document.getElementById("emailModal").classList.remove("show");
+}
+</script>
+<script>
+const fileInput = document.getElementById("fileInput");
+const dropzone = document.getElementById("dropzone");
+const uploadBtn = document.getElementById("uploadBtn");
+
+let selectedFile = null;
+
+/* =========================
+   OPEN FILE PICKER
+========================= */
+dropzone.addEventListener("click", () => {
+    fileInput.click();
+});
+
+/* =========================
+   FILE SELECT
+========================= */
+fileInput.addEventListener("change", (e) => {
+    selectedFile = e.target.files[0];
+
+    if (selectedFile) {
+        document.querySelector(".file-preview").style.display = "block";
+
+        document.querySelector(".file-name").textContent = selectedFile.name;
+
+        document.querySelector(".file-size").textContent =
+            (selectedFile.size / 1024).toFixed(1) + " KB";
+
+        uploadBtn.disabled = false;
+    }
+});
+
+/* =========================
+   ANALYZE BUTTON (FIXED)
+========================= */
+uploadBtn.addEventListener("click", async () => {
+
+    if (!selectedFile) {
+        alert("Please choose a dataset file.");
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("dataset", selectedFile);
+
+    try {
+
+        uploadBtn.innerHTML = "Processing...";
+        uploadBtn.disabled = true;
+
+        const response = await fetch("/upload", {
+            method: "POST",
+            body: formData
+        });
+
+        /* ❌ OLD WRONG: response.url */
+
+        /* ✅ FIX: read redirect properly */
+        if (response.redirected) {
+            window.location.href = response.url;
+            return;
+        }
+
+        /* If backend returns JSON (duplicate case etc.) */
+        const data = await response.json().catch(() => null);
+
+        if (data && data.dashboard_url) {
+            window.location.href = data.dashboard_url;
+            return;
+        }
+
+        throw new Error("Upload failed");
+
+    } catch (error) {
+
+        console.error(error);
+        alert("Failed to process dataset file.");
+
+        uploadBtn.innerHTML = "Analyze Dataset";
+        uploadBtn.disabled = false;
+    }
+});
+</script>
 {% endblock %}

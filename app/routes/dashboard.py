@@ -39,8 +39,8 @@ def index():
 @dashboard_bp.route("/history", methods=["GET"])
 def history():
 
-    if "user" not in session:
-        return redirect(url_for("auth.login"))
+    if not session.get("user") and not session.get("email_user"):
+      return redirect(url_for("auth.login"))
 
     uploads = get_uploaded_files()
 
@@ -48,6 +48,32 @@ def history():
         "history.html",
         uploads=uploads,
     )
+
+
+# =========================================================
+# MY UPLOADS
+# =========================================================
+
+@dashboard_bp.route("/my-uploads")
+def my_uploads():
+
+    current_user = (
+        session.get("user")
+        or session.get("email_user")
+    )
+
+    if not current_user:
+        return redirect(url_for("auth.login"))
+
+    uploads = Dataset.query.filter_by(
+        user_email=current_user["email"]
+    ).order_by(Dataset.id.desc()).all()
+
+    return render_template(
+        "my_uploads.html",
+        uploads=uploads
+    )
+
 
 # =========================================================
 # FILE UPLOAD
@@ -57,103 +83,117 @@ def history():
 def upload_file():
 
     # 🔐 LOGIN CHECK
-    if "user" not in session:
+    if not session.get("logged_in"):
         return redirect(url_for("auth.login"))
 
+    # GET FILE
     uploaded_file = request.files.get("dataset")
 
     if not uploaded_file:
-        return error_response("Please choose a CSV or Excel file.", 400)
+        return error_response(
+            "Please choose a CSV or Excel file.",
+            400
+        )
 
     if uploaded_file.filename == "":
-        return error_response("No file selected.", 400)
+        return error_response(
+            "No file selected.",
+            400
+        )
 
     if not is_allowed_file(uploaded_file.filename):
-        return error_response("Unsupported file type. Upload CSV, XLS or XLSX.", 400)
+        return error_response(
+            "Unsupported file type. Upload CSV, XLS or XLSX.",
+            400
+        )
 
-    original_name = secure_filename(uploaded_file.filename)
+    try:
 
-    # =====================================================
-    # DUPLICATE DETECTION
-    # =====================================================
+        original_name = secure_filename(
+            uploaded_file.filename
+        )
 
-    uploaded_hash = None
-    existing_file_id = None
+        # =====================================================
+        # DUPLICATE DETECTION
+        # =====================================================
 
-    if should_check_duplicates():
-        uploaded_hash = hash_uploaded_file(uploaded_file)
-        existing_file_id = find_existing_upload(uploaded_hash)
+        uploaded_hash = None
+        existing_file_id = None
 
-    if existing_file_id:
-        dashboard_url = url_for("dashboard.view_dashboard", file_id=existing_file_id)
+        if should_check_duplicates():
+            uploaded_hash = hash_uploaded_file(uploaded_file)
+            existing_file_id = find_existing_upload(uploaded_hash)
+
+        if existing_file_id:
+
+            dashboard_url = url_for(
+                "dashboard.view_dashboard",
+                file_id=existing_file_id
+            )
+
+            if wants_json():
+                return jsonify({
+                    "duplicate": True,
+                    "file_id": existing_file_id,
+                    "dashboard_url": dashboard_url,
+                })
+
+            return redirect(dashboard_url)
+
+        # =====================================================
+        # SAVE NEW FILE
+        # =====================================================
+
+        unique_id = uuid4().hex
+
+        file_id = f"{unique_id}__{original_name}"
+
+        file_path = uploaded_file_path(file_id)
+
+        uploaded_file.save(file_path)
+
+        # =====================================================
+        # SAVE TO MYSQL DATABASE
+        # =====================================================
+
+        current_user = session.get("user")
+        if not current_user:
+            return redirect(url_for("auth.login"))
+
+        dataset = Dataset(
+            filename=original_name,
+            filepath=str(file_path),
+            user_email=current_user["email"]
+        )
+
+        db.session.add(dataset)
+        db.session.commit()
+
+        if uploaded_hash:
+            write_hash_file(file_path, uploaded_hash)
+
+        dashboard_url = url_for(
+            "dashboard.view_dashboard",
+            file_id=file_id
+        )
 
         if wants_json():
             return jsonify({
-                "duplicate": True,
-                "file_id": existing_file_id,
+                "duplicate": False,
+                "file_id": file_id,
                 "dashboard_url": dashboard_url,
             })
 
         return redirect(dashboard_url)
 
-    # =====================================================
-    # SAVE NEW FILE
-    # =====================================================
+    except Exception as e:
 
-    unique_id = uuid4().hex
-    file_id = f"{unique_id}__{original_name}"
+        current_app.logger.error(str(e))
 
-    file_path = uploaded_file_path(file_id)
-    uploaded_file.save(file_path)
-
-    # =====================================================
-    # SAVE TO MYSQL DATABASE (NEW PART)
-    # =====================================================
-
-    dataset = Dataset(
-        filename=original_name,
-        filepath=str(file_path),
-        user_email=session["user"]["email"]
-    )
-
-    db.session.add(dataset)
-    db.session.commit()
-
-    if uploaded_hash:
-        write_hash_file(file_path, uploaded_hash)
-
-    dashboard_url = url_for("dashboard.view_dashboard", file_id=file_id)
-
-    if wants_json():
-        return jsonify({
-            "duplicate": False,
-            "file_id": file_id,
-            "dashboard_url": dashboard_url,
-        })
-
-    return redirect(dashboard_url)
-
-
-# =========================================================
-# ANALYZE API
-# =========================================================
-
-@dashboard_bp.route("/analyze", methods=["POST"])
-def analyze_file():
-
-    file_id = requested_file_id()
-
-    if not file_id:
-        return error_response("Provide a file_id to analyze.", 400)
-
-    file_path = uploaded_file_path(file_id)
-
-    if not file_path.exists():
-        return error_response("Uploaded file not found.", 404)
-
-    dashboard = generate_dashboard_from_file(file_path)
-
-    return jsonify(dashboard)
+        return error_response(
+            f"Failed to process dataset file: {str(e)}",
+            500
+        )
 
 
 # =========================================================
@@ -163,15 +203,20 @@ def analyze_file():
 @dashboard_bp.route("/dashboard/<file_id>", methods=["GET"])
 def view_dashboard(file_id: str):
 
-    # LOGIN CHECK
-    if "user" not in session:
+    # 🔐 LOGIN CHECK
+    if not session.get("logged_in"):
         return redirect(url_for("auth.login"))
 
     safe_file_id = secure_filename(file_id)
+
     file_path = uploaded_file_path(safe_file_id)
 
     if not file_path.exists():
-        current_app.logger.error(f"File missing: {file_path}")
+
+        current_app.logger.error(
+            f"File missing: {file_path}"
+        )
+
         return render_template(
             "dashboard.html",
             dashboard=None,
@@ -179,9 +224,15 @@ def view_dashboard(file_id: str):
         ), 404
 
     try:
+
         dashboard = generate_dashboard_from_file(file_path)
+
     except Exception as e:
-        current_app.logger.error(f"Dashboard error: {str(e)}")
+
+        current_app.logger.error(
+            f"Dashboard error: {str(e)}"
+        )
+
         return render_template(
             "dashboard.html",
             dashboard=None,
@@ -193,6 +244,8 @@ def view_dashboard(file_id: str):
         dashboard=dashboard,
         chart_data=dashboard.get("chart_data", []),
     )
+
+
 # =========================================================
 # HELPERS
 # =========================================================

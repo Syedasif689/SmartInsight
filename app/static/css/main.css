@@ -1086,3 +1086,346 @@ tbody tr:hover {
     justify-content:center;
     text-decoration:none;
 }
+.modal{
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.modal.show{
+    display: flex;
+}
+
+.modal-content{
+    width: 420px;
+    background: #0f172a;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 24px;
+    padding: 35px;
+    position: relative;
+}
+/* =========================
+   GOOGLE BUTTON
+========================= */
+
+.google-login-btn,
+.email-login-btn {
+    width: 100%;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    gap: 12px;
+
+    padding: 14px 18px;
+
+    border-radius: 14px;
+
+    font-weight: 600;
+
+    text-decoration: none;
+
+    margin-top: 14px;
+
+    cursor: pointer;
+
+    transition: 0.3s ease;
+}
+
+/* GOOGLE */
+
+.google-login-btn {
+    background: white;
+
+    color: #111827;
+
+    border: 1px solid #dbe2ea;
+}
+
+.google-login-btn:hover {
+    background: #f8fafc;
+    transform: translateY(-2px);
+}
+
+/* EMAIL */
+
+.email-login-btn {
+    background: linear-gradient(
+      135deg,
+      #2563eb,
+      #0f172a
+    );
+
+    border: none;
+
+    color: white;
+}
+
+.email-login-btn:hover {
+    transform: translateY(-2px);
+    opacity: 0.95;
+}
+
+/* =========================
+   EMAIL MODAL
+========================= */
+
+.email-modal {
+    position: fixed;
+    inset: 0;
+
+    background: rgba(0,0,0,0.65);
+
+    display: none;
+    align-items: center;
+    justify-content: center;
+
+    z-index: 9999;
+
+    backdrop-filter: blur(8px);
+}
+
+.email-modal.show {
+    display: flex;
+}
+
+.email-modal-card {
+    width: 100%;
+    max-width: 430px;
+
+    background: white;
+
+    border-radius: 26px;
+
+    padding: 38px 34px;
+
+    position: relative;
+
+    box-shadow:
+      0 20px 60px rgba(0,0,0,0.25);
+
+    animation: modalPop 0.25s ease;
+}
+
+@keyframes modalPop {
+
+    from {
+        transform: scale(0.92);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.close-modal {
+    position: absolute;
+
+    top: 18px;
+    right: 18px;
+
+    border: none;
+
+    background: transparent;
+
+    font-size: 20px;
+
+    cursor: pointer;
+
+    color: #64748b;
+}
+
+.modal-logo {
+    width: 68px;
+    height: 68px;
+
+    border-radius: 20px;
+
+    background: linear-gradient(
+      135deg,
+      #2563eb,
+      #0f172a
+    );
+
+    color: white;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    font-size: 24px;
+    font-weight: 700;
+
+    margin-bottom: 24px;
+}
+
+.email-modal-card h2 {
+    font-size: 28px;
+
+    color: #0f172a;
+
+    margin-bottom: 8px;
+}
+
+.modal-subtitle {
+    color: #64748b;
+
+    margin-bottom: 30px;
+
+    line-height: 1.6;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+
+    gap: 10px;
+
+    margin-bottom: 24px;
+}
+
+.input-group label {
+    font-weight: 600;
+
+    color: #0f172a;
+}
+
+.input-group input {
+    height: 56px;
+
+    border-radius: 14px;
+
+    border: 1px solid #dbe2ea;
+
+    padding: 0 16px;
+
+    font-size: 15px;
+
+    outline: none;
+
+    transition: 0.3s ease;
+}
+
+.input-group input:focus {
+    border-color: #2563eb;
+
+    box-shadow:
+      0 0 0 4px rgba(37,99,235,0.12);
+}
+
+.send-otp-btn {
+    width: 100%;
+
+    height: 56px;
+
+    border: none;
+
+    border-radius: 14px;
+
+    background: linear-gradient(
+      135deg,
+      #2563eb,
+      #0f172a
+    );
+
+    color: white;
+
+    font-size: 16px;
+    font-weight: 600;
+
+    cursor: pointer;
+
+    transition: 0.3s ease;
+}
+
+.send-otp-btn:hover {
+    transform: translateY(-2px);
+
+    opacity: 0.96;
+}
+
+/* =========================
+   EMAIL USER CARD
+========================= */
+
+.email-user-card {
+    display: flex;
+    align-items: center;
+
+    gap: 14px;
+
+    margin-top: 18px;
+
+    padding: 16px;
+
+    border-radius: 18px;
+
+    background: rgba(255,255,255,0.08);
+
+    border: 1px solid rgba(255,255,255,0.08);
+}
+
+.email-avatar {
+    width: 52px;
+    height: 52px;
+
+    border-radius: 50%;
+
+    background: linear-gradient(
+      135deg,
+      #2563eb,
+      #0f172a
+    );
+
+    color: white;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    font-weight: 700;
+
+    font-size: 18px;
+}
+
+.user-details {
+    display: flex;
+    flex-direction: column;
+}
+
+.user-details strong {
+    color: white;
+}
+
+.user-details small {
+    color: #cbd5e1;
+}
+
+.logout-btn {
+    width: 100%;
+
+    margin-top: 14px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 13px;
+
+    border-radius: 14px;
+
+    background: #ef4444;
+
+    color: white;
+
+    text-decoration: none;
+
+    font-weight: 600;
+}
