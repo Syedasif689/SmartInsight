@@ -25,13 +25,18 @@ def create_app(config_name="default"):
     app.config["GOOGLE_CLIENT_ID"] = os.getenv("GOOGLE_CLIENT_ID")
     app.config["GOOGLE_CLIENT_SECRET"] = os.getenv("GOOGLE_CLIENT_SECRET")
 
-    # MYSQL (IMPORTANT FIX)
-    password = quote_plus(os.getenv("MYSQL_PASSWORD", ""))
-
-    app.config["SQLALCHEMY_DATABASE_URI"] = (
-        f"mysql+pymysql://{os.getenv('MYSQL_USER')}:{password}@"
-        f"{os.getenv('MYSQL_HOST')}/{os.getenv('MYSQL_DB')}"
-    )
+    # MYSQL (Railway support)
+    mysql_url = os.getenv("MYSQL_URL")
+    if mysql_url:
+        if mysql_url.startswith("mysql://"):
+            mysql_url = mysql_url.replace("mysql://", "mysql+pymysql://", 1)
+        app.config["SQLALCHEMY_DATABASE_URI"] = mysql_url
+    else:
+        password = quote_plus(os.getenv("MYSQL_PASSWORD", ""))
+        app.config["SQLALCHEMY_DATABASE_URI"] = (
+            f"mysql+pymysql://{os.getenv('MYSQL_USER')}:{password}@"
+            f"{os.getenv('MYSQL_HOST')}/{os.getenv('MYSQL_DB')}"
+        )
 
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
