@@ -114,12 +114,60 @@ pytest
 
 ## Deployment
 
-You can deploy SmartInsight on:
+SmartInsight can be deployed on Render, Railway, Vercel, or PythonAnywhere.
 
-- Render
-- Railway
-- Vercel
-- PythonAnywhere
+### Render
+
+1. Add `runtime.txt` with:
+
+```text
+python-3.13.12
+```
+
+2. Add `render.yaml` to configure the web service:
+
+```yaml
+services:
+  - type: web
+    name: smartinsight
+    env: python
+    plan: free
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT run:app
+    envVars:
+      - key: SECRET_KEY
+        sync: false
+      - key: MYSQL_HOST
+        sync: false
+      - key: MYSQL_USER
+        sync: false
+      - key: MYSQL_PASSWORD
+        sync: false
+      - key: MYSQL_DB
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: MAIL_SERVER
+      - key: MAIL_PORT
+      - key: MAIL_USE_TLS
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_DEFAULT_SENDER
+      - key: MAX_UPLOAD_MB
+      - key: FAST_ANALYSIS_ROW_LIMIT
+      - key: COLUMN_SCAN_ROW_LIMIT
+      - key: DUPLICATE_CHECK_MAX_MB
+      - key: UPLOAD_FOLDER
+```
+
+3. Set the required Render environment variables in the Render dashboard.
+
+> Note: Render filesystem is ephemeral, so uploaded files are not permanent in production.
 
 ---
 

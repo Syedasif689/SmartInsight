@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: smartinsight
+    env: python
+    plan: free
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT run:app
+    envVars:
+      - key: SECRET_KEY
+        sync: false
+      - key: MYSQL_HOST
+        sync: false
+      - key: MYSQL_USER
+        sync: false
+      - key: MYSQL_PASSWORD
+        sync: false
+      - key: MYSQL_DB
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: MAIL_SERVER
+      - key: MAIL_PORT
+      - key: MAIL_USE_TLS
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_DEFAULT_SENDER
+      - key: MAX_UPLOAD_MB
+      - key: FAST_ANALYSIS_ROW_LIMIT
+      - key: COLUMN_SCAN_ROW_LIMIT
+      - key: DUPLICATE_CHECK_MAX_MB
+      - key: UPLOAD_FOLDER
