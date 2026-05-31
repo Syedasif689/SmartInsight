@@ -132,10 +132,7 @@ def login():
             500,
         )
 
-    redirect_uri = url_for(
-        "auth.authorize",
-        _external=True,
-    )
+    redirect_uri = "https://smartinsight-7y8r.onrender.com/authorize"
 
     return oauth.google.authorize_redirect(
         redirect_uri,
