@@ -86,6 +86,7 @@ def verify():
         }
 
         session["logged_in"] = True
+        session.permanent = True
 
         return redirect(url_for("dashboard.index"))
 
@@ -149,6 +150,7 @@ def authorize():
     }
 
     session["logged_in"] = True
+    session.permanent = True    
 
     return redirect("/")
 

@@ -7,6 +7,7 @@ from flask import (
     Blueprint,
     current_app,
     jsonify,
+    make_response,
     redirect,
     render_template,
     request,
@@ -163,6 +164,7 @@ def upload_file():
         dataset = Dataset(
             filename=original_name,
             filepath=str(file_path),
+            file_id=file_id,
             user_email=current_user["email"]
         )
 
@@ -239,11 +241,70 @@ def view_dashboard(file_id: str):
             error="Failed to generate dashboard.",
         ), 500
 
+    dataset = get_dataset_for_file_id(file_id)
+
     return render_template(
         "dashboard.html",
         dashboard=dashboard,
         chart_data=dashboard.get("chart_data", []),
+        dataset=dataset,
+        file_id=file_id,
     )
+
+
+@dashboard_bp.route("/dashboard/<file_id>/download", methods=["GET"])
+def download_dashboard(file_id: str):
+
+    # 🔐 LOGIN CHECK
+    if not session.get("logged_in"):
+        return redirect(url_for("auth.login"))
+
+    safe_file_id = secure_filename(file_id)
+    file_path = uploaded_file_path(safe_file_id)
+
+    if not file_path.exists():
+        current_app.logger.error(
+            f"File missing: {file_path}"
+        )
+        return render_template(
+            "dashboard.html",
+            dashboard=None,
+            error="Uploaded file not found.",
+        ), 404
+
+    try:
+        dashboard = generate_dashboard_from_file(file_path)
+    except Exception as e:
+        current_app.logger.error(
+            f"Dashboard export error: {str(e)}"
+        )
+        return render_template(
+            "dashboard.html",
+            dashboard=None,
+            error="Failed to generate export file.",
+        ), 500
+
+    dataset = get_dataset_for_file_id(file_id)
+
+    export_name = f"{display_name(file_id).rsplit('.', 1)[0]}-dashboard.html"
+
+    if dataset:
+        dataset.downloaded_filename = export_name
+        dataset.downloaded_at = datetime.utcnow()
+        db.session.commit()
+
+    html_content = render_template(
+        "dashboard_export.html",
+        dashboard=dashboard,
+    )
+
+    response = make_response(html_content)
+    response.headers["Content-Type"] = "text/html"
+    response.headers[
+        "Content-Disposition"
+    ] = f"attachment; filename={export_name}"
+
+    return response
 
 
 # =========================================================
@@ -255,6 +316,27 @@ def is_allowed_file(filename: str) -> bool:
         return False
     ext = filename.rsplit(".", 1)[1].lower()
     return ext in current_app.config["ALLOWED_EXTENSIONS"]
+
+
+def get_dataset_for_file_id(file_id: str):
+    safe_file_id = secure_filename(file_id)
+    dataset = Dataset.query.filter_by(file_id=safe_file_id).first()
+    if dataset:
+        return dataset
+
+    file_path = uploaded_file_path(safe_file_id)
+    dataset = Dataset.query.filter_by(filepath=str(file_path)).first()
+
+    if not dataset:
+        dataset = Dataset.query.filter(
+            Dataset.filepath.like(f"%{safe_file_id}%")
+        ).first()
+
+    if dataset and not dataset.file_id:
+        dataset.file_id = safe_file_id
+        db.session.commit()
+
+    return dataset
 
 
 def uploaded_file_path(file_id: str) -> Path:

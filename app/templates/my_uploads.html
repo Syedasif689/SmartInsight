@@ -1,48 +1,41 @@
-```html
 {% extends "base.html" %}
 
 {% block title %}My Uploads - SmartInsight{% endblock %}
 
 {% block content %}
 
-<div class="uploads-page">
+<div class="uploads-container">
 
+    <!-- Header -->
     <div class="uploads-header">
         <h1>My Uploads</h1>
-        <p>View all datasets you uploaded.</p>
+        <p>All your uploaded datasets and generated dashboards</p>
     </div>
 
     {% if uploads %}
 
+    <!-- Grid -->
     <div class="uploads-grid">
 
         {% for upload in uploads %}
 
         <div class="upload-card">
 
-            <div class="upload-icon">
-                📊
+            <div class="upload-left">
+                <div class="upload-icon">📊</div>
             </div>
 
-            <div class="upload-info">
+            <div class="upload-middle">
 
-                <h3>
+                <h3 class="filename">
                     {{ upload.filename }}
                 </h3>
 
-                <p>
-                    Uploaded:
-                    {{ upload.uploaded_at }}
+                <p class="meta">
+                    Uploaded on {{ upload.uploaded_at.strftime('%d %b %Y, %H:%M') if upload.uploaded_at else '' }}
                 </p>
 
             </div>
-
-            <a
-                href="{{ url_for('dashboard.view_dashboard', file_id=upload.file_id) }}"
-                class="view-btn"
-            >
-                Open Dashboard
-            </a>
 
         </div>
 
@@ -52,13 +45,15 @@
 
     {% else %}
 
-    <div class="empty-upload-state">
+    <!-- Empty State -->
+    <div class="empty-state">
+
+        <div class="empty-icon">📁</div>
 
         <h2>No uploads yet</h2>
+        <p>Upload a dataset to generate your first dashboard</p>
 
-        <p>
-            Upload a dataset to generate your first dashboard.
-        </p>
+        <a href="/upload" class="primary-btn">Upload Dataset</a>
 
     </div>
 
@@ -67,4 +62,3 @@
 </div>
 
 {% endblock %}
-```

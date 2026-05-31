@@ -2,11 +2,25 @@
 
 {% block content %}
 <div class="otp-container">
-  <h2>Enter OTP</h2>
+  <div class="otp-box">
 
-  <form method="POST">
-    <input type="text" name="otp" placeholder="Enter OTP" required>
-    <button type="submit">Verify</button>
-  </form>
+    <h2>OTP Verification</h2>
+    <p>Enter the verification code sent to your email</p>
+
+    <form method="POST">
+      <input 
+        type="text" 
+        name="otp" 
+        placeholder="Enter OTP"
+        maxlength="6"
+        pattern="[0-9]{6}"
+        required
+        autocomplete="one-time-code"
+      >
+
+      <button type="submit">Verify</button>
+    </form>
+
+  </div>
 </div>
 {% endblock %}
