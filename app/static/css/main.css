@@ -253,7 +253,7 @@ button:hover, .button-link:hover {
       rgba(0, 0, 0, 0.72),
       rgba(0, 0, 0, 0.78)
     ),
-    url("/static/images/dashboard-bg.jpg");
+    url("/static/images/dashboard-hero.jpg");
 
   background-size: cover;
   background-position: center;

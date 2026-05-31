@@ -40,8 +40,8 @@ def index():
 @dashboard_bp.route("/history", methods=["GET"])
 def history():
 
-    if not session.get("user") and not session.get("email_user"):
-      return redirect(url_for("auth.login"))
+    if not session.get("user"):
+        return redirect(url_for("auth.login"))
 
     uploads = get_uploaded_files()
 
@@ -58,13 +58,10 @@ def history():
 @dashboard_bp.route("/my-uploads")
 def my_uploads():
 
-    current_user = (
-        session.get("user")
-        or session.get("email_user")
-    )
+    current_user = session.get("user")
 
     if not current_user:
-        return redirect(url_for("auth.login"))
+     return redirect(url_for("auth.login"))
 
     uploads = Dataset.query.filter_by(
         user_email=current_user["email"]

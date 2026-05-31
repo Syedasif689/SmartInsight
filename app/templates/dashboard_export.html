@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{{ dashboard.title }}</title>
+    <div class="section box" style="background:#fff3cd; border:1px solid #ffeeba;">
+    <strong>Important Note</strong>
+
+    <p style="margin-top:8px;">
+        This dashboard is automatically generated using a machine learning model.
+        The insights and visualizations are <b>predicted and pattern-based</b>,
+        and should not be considered as deeply validated or manually verified analysis.
+        <b>you can use the generated dashboard for exploratory analysis and initial insights</b>
+    </p>
+
+    <p>
+        For critical decisions, please perform additional manual verification or expert analysis.
+    </p>
+</div>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #fff;
+            color: #111;
+        }
+
+        h1, h2, h3 {
+            color: #1a1a1a;
+        }
+
+        .box {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+
+        .kpi-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .kpi {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            min-width: 150px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        table, th, td {
+            border: 1px solid #ccc;
+        }
+
+        th, td {
+            padding: 8px;
+        }
+
+        ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .section {
+            margin-top: 25px;
+        }
+    </style>
+</head>
+
+<body>
+
+<h1>{{ dashboard.title }}</h1>
+
+<!-- =======================
+     SHAPES / DATA SIZE
+======================= -->
+<div class="section box">
+    <h3>Dataset Shape</h3>
+
+    <p>
+        <b>Rows:</b> {{ dashboard.shape.rows }} <br>
+        <b>Columns:</b> {{ dashboard.shape.columns }}
+    </p>
+</div>
+
+<!-- =======================
+     KPIs
+======================= -->
+<div class="section">
+    <h3>KPIs</h3>
+
+    <div class="kpi-container">
+
+        {% for kpi in dashboard.kpis %}
+        <div class="kpi">
+            <b>{{ kpi.label }}</b><br>
+            {{ kpi.value }}<br>
+            <small>{{ kpi.hint }}</small>
+        </div>
+        {% endfor %}
+
+    </div>
+</div>
+
+<!-- =======================
+     INSIGHTS (NEW)
+======================= -->
+<div class="section box">
+    <h3>Insights</h3>
+
+    <ul>
+        {% for insight in dashboard.insights %}
+            <li>{{ insight }}</li>
+        {% endfor %}
+    </ul>
+</div>
+
+<!-- =======================
+     COLUMNS
+======================= -->
+<div class="section box">
+    <h3>Detected Columns</h3>
+
+    <p>
+        <b>Numeric:</b> {{ dashboard.columns.numeric | join(", ") or "None" }} <br>
+        <b>Categorical:</b> {{ dashboard.columns.categorical | join(", ") or "None" }} <br>
+        <b>Date:</b> {{ dashboard.columns.date | join(", ") or "None" }}
+    </p>
+</div>
+
+<!-- =======================
+     DATA PREVIEW
+======================= -->
+{% if dashboard.preview %}
+<div class="section">
+    <h3>Data Preview</h3>
+
+    <table>
+        <thead>
+            <tr>
+                {% for col in dashboard.preview.columns %}
+                    <th>{{ col }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for row in dashboard.preview.rows %}
+            <tr>
+                {% for col in dashboard.preview.columns %}
+                    <td>{{ row[col] }}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+</body>
+</html>

@@ -18,7 +18,8 @@ def create_app(config_name="default"):
 
     app.config.from_object(config_by_name[config_name])
     app.config["UPLOAD_FOLDER"] = str(app.config["UPLOAD_FOLDER"])
-
+    app.config["SESSION_COOKIE_SECURE"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     # SECRET
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", app.config["SECRET_KEY"])
 
