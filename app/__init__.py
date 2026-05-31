@@ -19,14 +19,14 @@ def create_app(config_name="default"):
     app.config["UPLOAD_FOLDER"] = str(app.config["UPLOAD_FOLDER"])
 
     # SECRET KEY
-    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
+    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", app.config["SECRET_KEY"])
 
     # GOOGLE OAUTH
     app.config["GOOGLE_CLIENT_ID"] = os.getenv("GOOGLE_CLIENT_ID")
     app.config["GOOGLE_CLIENT_SECRET"] = os.getenv("GOOGLE_CLIENT_SECRET")
 
     # MYSQL (IMPORTANT FIX)
-    password = quote_plus(os.getenv("MYSQL_PASSWORD"))
+    password = quote_plus(os.getenv("MYSQL_PASSWORD", ""))
 
     app.config["SQLALCHEMY_DATABASE_URI"] = (
         f"mysql+pymysql://{os.getenv('MYSQL_USER')}:{password}@"
