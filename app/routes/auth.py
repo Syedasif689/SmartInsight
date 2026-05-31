@@ -1,4 +1,7 @@
-from flask import Blueprint, request, session, redirect, url_for, render_template, current_app
+from flask import (
+    Blueprint, request, session, redirect,
+    url_for, render_template, current_app
+)
 from flask_mail import Message
 from datetime import datetime
 import random
@@ -9,168 +12,152 @@ from app.models.user import User
 auth_bp = Blueprint("auth", __name__)
 
 
+# =========================================================
+# ERROR HANDLER (clean + reusable)
+# =========================================================
 def auth_error(message: str, status_code: int = 500, exc: Exception | None = None):
-    if exc is not None:
+    if exc:
         current_app.logger.exception(message)
     else:
         current_app.logger.error(message)
+
     return render_template("verify.html", error=message), status_code
 
 
-# =========================
-# OTP GENERATOR
-# =========================
-
+# =========================================================
+# OTP GENERATION
+# =========================================================
 def generate_otp():
     return str(random.randint(100000, 999999))
 
 
-# =========================
+# =========================================================
 # SEND OTP
-# =========================
-
+# =========================================================
 @auth_bp.route("/send-otp", methods=["POST"])
 def send_otp():
 
-    email = request.form.get("email")
+    email = request.form.get("email", "").strip()
 
     if not email:
-        return auth_error("Please enter a valid email address.", 400)
+        return auth_error("Email is required", 400)
 
     otp = generate_otp()
 
-    # Save in session
+    # safer session handling
     session["otp"] = otp
-    session["email"] = email
+    session["pending_email"] = email
+    session["otp_verified"] = False
 
     try:
         msg = Message(
             subject="SmartInsight OTP Verification",
             recipients=[email],
-            body=f"Your SmartInsight OTP is: {otp}"
+            body=f"Your OTP is: {otp}"
         )
         mail.send(msg)
+
     except Exception as exc:
         return auth_error(
-            "Unable to send OTP right now. Please check your mail configuration and try again.",
+            "Failed to send OTP. Check mail configuration.",
             500,
-            exc,
+            exc
         )
 
     return redirect(url_for("auth.verify"))
 
 
-# =========================
-# VERIFY PAGE + OTP VERIFY
-# =========================
-
+# =========================================================
+# VERIFY OTP
+# =========================================================
 @auth_bp.route("/verify", methods=["GET", "POST"])
 def verify():
 
-    # OPEN VERIFY PAGE
     if request.method == "GET":
         return render_template("verify.html")
 
-    # VERIFY OTP
-    entered_otp = request.form.get("otp")
+    entered_otp = request.form.get("otp", "").strip()
 
     saved_otp = session.get("otp")
-    email = session.get("email")
+    email = session.get("pending_email")
 
-    if not email:
-        return auth_error(
-            "Session expired or email address not found. Please request a new OTP.",
-            400,
+    if not email or not saved_otp:
+        return auth_error("OTP expired. Please try again.", 400)
+
+    if entered_otp != saved_otp:
+        return render_template("verify.html", error="Invalid OTP")
+
+    # get or create user
+    user = User.query.filter_by(email=email).first()
+
+    if not user:
+        user = User(
+            name=email.split("@")[0].title(),
+            email=email,
+            auth_type="email",
+            picture=None,
+            last_login=datetime.utcnow(),
         )
+        db.session.add(user)
+    else:
+        user.last_login = datetime.utcnow()
 
-    if entered_otp == saved_otp:
+    db.session.commit()
 
-        user = User.query.filter_by(email=email).first()
+    # clear OTP session
+    session.pop("otp", None)
+    session.pop("pending_email", None)
 
-        if not user:
-            user = User(
-                name=email.split("@")[0].title(),
-                email=email,
-                auth_type="email",
-                picture=None,
-            )
-            db.session.add(user)
-        else:
-            user.last_login = datetime.utcnow()
+    # login session
+    session["user"] = {
+        "name": user.name,
+        "email": user.email,
+        "picture": user.picture,
+        "auth_type": "email",
+    }
 
-        db.session.commit()
+    session["otp_verified"] = True
+    session.permanent = True
 
-        session["user"] = {
-            "name": user.name,
-            "email": user.email,
-            "picture": user.picture,
-            "auth_type": "email",
-        }
-
-        session["logged_in"] = True
-        session.permanent = True
-
-        return redirect(url_for("dashboard.index"))
-
-    # ❌ WRONG OTP CASE
-    return render_template(
-        "verify.html",
-        error="Invalid OTP"
-    )
+    return redirect(url_for("dashboard.index"))
 
 
-# =========================
+# =========================================================
 # GOOGLE LOGIN
-# =========================
-
+# =========================================================
 @auth_bp.route("/login")
 def login():
 
     if not current_app.config.get("GOOGLE_CLIENT_ID") or not current_app.config.get("GOOGLE_CLIENT_SECRET"):
         return auth_error(
-            "Google OAuth is not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.",
+            "Google OAuth not configured in environment variables.",
             500,
         )
 
-    redirect_uri = url_for(
-        "auth.authorize",
-        _external=True,
-    )
+    redirect_uri = url_for("auth.authorize", _external=True)
 
     return oauth.google.authorize_redirect(
         redirect_uri,
-        prompt="select_account",
+        prompt="select_account"
     )
 
 
+# =========================================================
+# GOOGLE AUTHORIZE CALLBACK
+# =========================================================
 @auth_bp.route("/authorize")
 def authorize():
 
     try:
         token = oauth.google.authorize_access_token()
     except Exception as exc:
-        return auth_error(
-            "Google authorization failed. Please verify your OAuth configuration and try again.",
-            500,
-            exc,
-        )
+        return auth_error("Google login failed", 500, exc)
 
-    if not token:
-        return auth_error(
-            "Google authorization returned no token.",
-            500,
-        )
-
-    user_info = token.get("userinfo") if isinstance(token, dict) else None
-    if not user_info:
-        user_info = token if isinstance(token, dict) else {}
+    user_info = token.get("userinfo") or {}
 
     email = user_info.get("email")
     if not email:
-        return auth_error(
-            "Google user information could not be retrieved.",
-            500,
-        )
+        return auth_error("Google did not return email", 500)
 
     name = user_info.get("name") or email.split("@")[0].title()
     picture = user_info.get("picture")
@@ -178,7 +165,6 @@ def authorize():
     user = User.query.filter_by(email=email).first()
 
     if not user:
-
         user = User(
             name=name,
             email=email,
@@ -186,11 +172,8 @@ def authorize():
             auth_type="google",
             last_login=datetime.utcnow(),
         )
-
         db.session.add(user)
-
     else:
-
         user.last_login = datetime.utcnow()
 
     db.session.commit()
@@ -199,21 +182,18 @@ def authorize():
         "name": user.name,
         "email": user.email,
         "picture": user.picture,
+        "auth_type": "google",
     }
 
-    session["logged_in"] = True
-    session.permanent = True    
+    session.permanent = True
 
-    return redirect("/")
+    return redirect(url_for("dashboard.index"))
 
 
-# =========================
+# =========================================================
 # LOGOUT
-# =========================
-
+# =========================================================
 @auth_bp.route("/logout")
 def logout():
-
     session.clear()
-
-    return redirect("/")
+    return redirect(url_for("auth.login"))
