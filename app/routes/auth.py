@@ -9,8 +9,11 @@ from app.models.user import User
 auth_bp = Blueprint("auth", __name__)
 
 
-def auth_error(message: str, status_code: int = 500):
-    current_app.logger.error(message)
+def auth_error(message: str, status_code: int = 500, exc: Exception | None = None):
+    if exc is not None:
+        current_app.logger.exception(message)
+    else:
+        current_app.logger.error(message)
     return render_template("verify.html", error=message), status_code
 
 
@@ -49,7 +52,9 @@ def send_otp():
         mail.send(msg)
     except Exception as exc:
         return auth_error(
-            "Unable to send OTP right now. Please check your mail configuration and try again."
+            "Unable to send OTP right now. Please check your mail configuration and try again.",
+            500,
+            exc,
         )
 
     return redirect(url_for("auth.verify"))
@@ -147,6 +152,7 @@ def authorize():
         return auth_error(
             "Google authorization failed. Please verify your OAuth configuration and try again.",
             500,
+            exc,
         )
 
     if not token:

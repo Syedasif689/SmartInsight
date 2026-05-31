@@ -68,4 +68,17 @@ def create_app(config_name="default"):
 
         return render_template("dashboard.html", dashboard=None, error=message), 413
 
+    @app.errorhandler(Exception)
+    def handle_unhandled_exception(error):
+        app.logger.exception("Unhandled exception")
+
+        if request.is_json:
+            return jsonify({"error": "An unexpected error occurred."}), 500
+
+        return render_template(
+            "dashboard.html",
+            dashboard=None,
+            error="An unexpected error occurred. Please try again.",
+        ), 500
+
     return app
