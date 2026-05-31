@@ -87,3 +87,7 @@ def create_app(config_name="default"):
         ), 500
 
     return app
+
+
+# Export a default Flask app instance for Gunicorn entrypoints like `app:app`
+app = create_app()
