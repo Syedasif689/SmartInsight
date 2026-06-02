@@ -84,6 +84,19 @@ def create_app(config_name="default"):
     def home():
         return render_template("start.html")
 
+    @app.route("/health")
+    def health():
+        return jsonify({
+            "status": "ok",
+            "database_configured": bool(app.config.get("SQLALCHEMY_DATABASE_URI")),
+            "mail_server": app.config.get("MAIL_SERVER"),
+            "mail_port": app.config.get("MAIL_PORT"),
+            "mail_username_configured": bool(app.config.get("MAIL_USERNAME")),
+            "mail_password_configured": bool(app.config.get("MAIL_PASSWORD")),
+            "mail_sender_configured": bool(app.config.get("MAIL_DEFAULT_SENDER")),
+            "secret_key_configured": app.config.get("SECRET_KEY") != "dev-secret-key",
+        })
+
     # ERROR HANDLERS
     @app.errorhandler(RequestEntityTooLarge)
     def handle_large_upload(error):
