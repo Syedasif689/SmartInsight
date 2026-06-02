@@ -24,7 +24,7 @@ def env_bool(name: str, default: bool) -> bool:
 
 
 class BaseConfig:
-    MAIL_SERVER = env_value("MAIL_SERVER", "smtp.gmail.com")
+    MAIL_SERVER = env_value("MAIL_SERVER", "smtp.sendgrid.net")
     MAIL_PORT = env_int("MAIL_PORT", 587)
     MAIL_USE_TLS = env_bool("MAIL_USE_TLS", True)
     MAIL_TIMEOUT = env_int("MAIL_TIMEOUT", 10)
