@@ -11,6 +11,10 @@ class BaseConfig:
     MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
     MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER")
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key")
+    SQLALCHEMY_DATABASE_URI = os.getenv(
+        "DATABASE_URL",
+        f"sqlite:///{Path.cwd() / 'smartinsight.db'}",
+    )
     JSON_SORT_KEYS = False
     MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "200"))
     MAX_CONTENT_LENGTH = MAX_UPLOAD_MB * 1024 * 1024

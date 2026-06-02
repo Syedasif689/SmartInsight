@@ -36,16 +36,22 @@
     <!-- AUTH SECTION -->
 <div class="sidebar-auth">
 
-  <!-- GOOGLE USER -->
+  <!-- LOGGED IN USER -->
   {% if session.get("user") %}
 
     <div class="user-profile">
 
-      <img
-        src="{{ session['user']['picture'] }}"
-        alt="Profile"
-        class="user-avatar"
-      >
+      {% if session['user'].get('picture') %}
+        <img
+          src="{{ session['user']['picture'] }}"
+          alt="Profile"
+          class="user-avatar"
+        >
+      {% else %}
+        <div class="email-avatar">
+          {{ session['user']['name'][0] }}
+        </div>
+      {% endif %}
 
       <div>
 
@@ -66,39 +72,6 @@
     >
       Logout
     </a>
-
-  <!-- EMAIL USER -->
-  <!-- EMAIL USER -->
-{% elif session.get("email_user") %}
-
-<div class="user-profile">
-
-  <div class="email-avatar">
-    {{ session['email_user']['name'][0] }}
-  </div>
-
-  <div>
-
-    <strong>
-      {{ session['email_user']['name'] }}
-    </strong>
-
-    <small>
-      {{ session['email_user']['email'] }}
-    </small>
-
-  </div>
-
-</div>
-
-<a
-  href="{{ url_for('auth.logout') }}"
-  class="logout-btn"
->
-  Logout
-</a>
-
-
 
   <!-- NOT LOGGED IN -->
   {% else %}
@@ -186,9 +159,9 @@
            MODERN UPLOAD CARD (Below Hero - Separate Section)
       ========================= -->
       <section class="upload-section" id="upload">
-{% if not session.get("user") and not session.get("email_user") %}
+{% if not session.get("user") %}
 <div class="login-warning">
-  Please login with Google to upload and analyze datasets.
+  Please login to upload and analyze datasets.
 </div>
 
 {% endif %}
@@ -229,7 +202,7 @@
             <span class="progress-text">Uploading...</span>
           </div>
           
-    {% if session.get("user") or session.get("email_user") %}
+    {% if session.get("user") %}
     <button class="upload-btn" id="uploadBtn" disabled>
   <span>Analyze Dataset</span>
 

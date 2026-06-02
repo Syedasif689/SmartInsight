@@ -11,6 +11,8 @@ services:
         sync: false
       - key: MYSQL_HOST
         sync: false
+      - key: MYSQL_PORT
+        value: 3306
       - key: MYSQL_USER
         sync: false
       - key: MYSQL_PASSWORD

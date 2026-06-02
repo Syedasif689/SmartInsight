@@ -11,6 +11,29 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 load_dotenv()
 
 
+def database_uri_from_env():
+    mysql_url = os.getenv("MYSQL_URL")
+    if mysql_url:
+        if mysql_url.startswith("mysql://"):
+            return mysql_url.replace("mysql://", "mysql+pymysql://", 1)
+        return mysql_url
+
+    mysql_host = os.getenv("MYSQL_HOST")
+    mysql_user = os.getenv("MYSQL_USER")
+    mysql_password = os.getenv("MYSQL_PASSWORD")
+    mysql_db = os.getenv("MYSQL_DB")
+
+    if not all([mysql_host, mysql_user, mysql_password, mysql_db]):
+        return None
+
+    mysql_port = os.getenv("MYSQL_PORT", "3306")
+    return (
+        f"mysql+pymysql://{quote_plus(mysql_user)}:"
+        f"{quote_plus(mysql_password)}@{mysql_host}:{mysql_port}/"
+        f"{quote_plus(mysql_db)}"
+    )
+
+
 def create_app(config_name="default"):
     app = Flask(__name__)
 
@@ -28,11 +51,9 @@ def create_app(config_name="default"):
     app.config["GOOGLE_CLIENT_SECRET"] = os.getenv("GOOGLE_CLIENT_SECRET")
 
     # DB
-    mysql_url = os.getenv("MYSQL_URL")
-    if mysql_url:
-        if mysql_url.startswith("mysql://"):
-            mysql_url = mysql_url.replace("mysql://", "mysql+pymysql://", 1)
-        app.config["SQLALCHEMY_DATABASE_URI"] = mysql_url
+    database_uri = database_uri_from_env()
+    if database_uri:
+        app.config["SQLALCHEMY_DATABASE_URI"] = database_uri
 
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 

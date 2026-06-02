@@ -25,6 +25,18 @@ def generate_otp():
     return str(random.randint(100000, 999999))
 
 
+def login_user(user: User, auth_type: str):
+    session.clear()
+    session["logged_in"] = True
+    session["user"] = {
+        "name": user.name,
+        "email": user.email,
+        "picture": user.picture,
+        "auth_type": auth_type,
+    }
+    session.permanent = True
+
+
 # =========================
 # SEND OTP
 # =========================
@@ -100,15 +112,7 @@ def verify():
 
         db.session.commit()
 
-        session["user"] = {
-            "name": user.name,
-            "email": user.email,
-            "picture": user.picture,
-            "auth_type": "email",
-        }
-
-        session["logged_in"] = True
-        session.permanent = True
+        login_user(user, "email")
 
         return redirect(url_for("dashboard.index"))
 
@@ -186,14 +190,7 @@ def authorize():
 
     db.session.commit()
 
-    session.clear()
-    session["logged_in"] = True
-    session["user"] = {
-        "name": user.name,
-        "email": user.email,
-        "picture": user.picture,
-    }
-    session.permanent = True
+    login_user(user, "google")
     return redirect(url_for("dashboard.index"))
 # =========================
 # LOGOUT
