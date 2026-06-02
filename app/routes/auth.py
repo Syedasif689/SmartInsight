@@ -1,9 +1,12 @@
 from flask import Blueprint, request, session, redirect, url_for, render_template, current_app
-from flask_mail import Message
 from datetime import datetime
+from email.message import EmailMessage
+from email.utils import parseaddr
 import random
+import smtplib
+import ssl
 
-from app.extensions import oauth, db, mail
+from app.extensions import oauth, db
 from app.models.user import User
 
 auth_bp = Blueprint("auth", __name__)
@@ -69,6 +72,52 @@ def login_user(user: User, auth_type: str):
     session.permanent = True
 
 
+def send_otp_email(recipient: str, otp: str):
+    server = current_app.config.get("MAIL_SERVER")
+    port = current_app.config.get("MAIL_PORT")
+    timeout = current_app.config.get("MAIL_TIMEOUT", 10)
+    use_tls = current_app.config.get("MAIL_USE_TLS")
+    username = current_app.config.get("MAIL_USERNAME")
+    password = current_app.config.get("MAIL_PASSWORD")
+    sender = current_app.config.get("MAIL_DEFAULT_SENDER") or username
+    envelope_sender = parseaddr(sender or "")[1] or username
+
+    if not all([server, port, username, password, sender, envelope_sender]):
+        raise RuntimeError("Missing SMTP configuration")
+
+    msg = EmailMessage()
+    msg["Subject"] = "SmartInsight OTP Verification"
+    msg["From"] = sender
+    msg["To"] = recipient
+    msg.set_content(f"Your SmartInsight OTP is: {otp}")
+
+    current_app.logger.info(
+        "[OTP] SMTP connect start server=%s port=%s timeout=%s tls=%s",
+        server,
+        port,
+        timeout,
+        use_tls,
+    )
+
+    with smtplib.SMTP(server, port, timeout=timeout) as smtp:
+        current_app.logger.info("[OTP] SMTP connected")
+        smtp.ehlo()
+
+        if use_tls:
+            current_app.logger.info("[OTP] SMTP STARTTLS start")
+            smtp.starttls(context=ssl.create_default_context())
+            smtp.ehlo()
+            current_app.logger.info("[OTP] SMTP STARTTLS complete")
+
+        current_app.logger.info("[OTP] SMTP login start username=%s", mask_email(username))
+        smtp.login(username, password)
+        current_app.logger.info("[OTP] SMTP login complete")
+
+        current_app.logger.info("[OTP] SMTP send_message start email=%s", mask_email(recipient))
+        smtp.send_message(msg, from_addr=envelope_sender, to_addrs=[recipient])
+        current_app.logger.info("[OTP] SMTP send_message complete email=%s", mask_email(recipient))
+
+
 # =========================
 # SEND OTP
 # =========================
@@ -127,14 +176,8 @@ def send_otp():
             mask_email(email),
             sender,
         )
-        msg = Message(
-            subject="SmartInsight OTP Verification",
-            sender=sender,
-            recipients=[email],
-            body=f"Your SmartInsight OTP is: {otp}"
-        )
-        mail.send(msg)
-        current_app.logger.info("[OTP] mail.send succeeded email=%s", mask_email(email))
+        send_otp_email(email, otp)
+        current_app.logger.info("[OTP] OTP email send succeeded email=%s", mask_email(email))
     except Exception as exc:
         return otp_error(
             "Unable to send OTP right now. Please check your mail configuration and try again.",
