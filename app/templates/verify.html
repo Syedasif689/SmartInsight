@@ -8,6 +8,9 @@
       <div class="error-box">
         <h2>Authentication Error</h2>
         <p>{{ error }}</p>
+        {% if error_detail %}
+          <small>{{ error_detail }}</small>
+        {% endif %}
         <a href="{{ url_for('dashboard.index') }}">Return to login</a>
       </div>
     {% else %}

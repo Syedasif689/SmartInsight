@@ -17,12 +17,27 @@ def auth_error(message: str, status_code: int = 500, exc: Exception | None = Non
     return render_template("verify.html", error=message), status_code
 
 
+def mail_error_detail(exc: Exception) -> str:
+    smtp_error = getattr(exc, "smtp_error", None)
+    if isinstance(smtp_error, bytes):
+        smtp_error = smtp_error.decode("utf-8", errors="replace")
+
+    if smtp_error:
+        return f"{type(exc).__name__}: {smtp_error}"
+
+    return f"{type(exc).__name__}: {exc}"
+
+
 def otp_error(message: str, exc: Exception | None = None):
     if exc is not None:
         current_app.logger.exception(message)
     else:
         current_app.logger.error(message)
-    return render_template("verify.html", error=message), 200
+    return render_template(
+        "verify.html",
+        error=message,
+        error_detail=mail_error_detail(exc) if exc else None,
+    ), 200
 
 
 # =========================

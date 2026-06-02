@@ -3,6 +3,7 @@ from werkzeug.exceptions import RequestEntityTooLarge
 from dotenv import load_dotenv
 import os
 from urllib.parse import quote_plus
+from email.utils import parseaddr
 
 from app.config import config_by_name
 from app.extensions import db, migrate, oauth, mail
@@ -86,14 +87,23 @@ def create_app(config_name="default"):
 
     @app.route("/health")
     def health():
+        mail_username = app.config.get("MAIL_USERNAME")
+        mail_sender = app.config.get("MAIL_DEFAULT_SENDER")
+        sender_email = parseaddr(mail_sender or "")[1]
+
         return jsonify({
             "status": "ok",
             "database_configured": bool(app.config.get("SQLALCHEMY_DATABASE_URI")),
             "mail_server": app.config.get("MAIL_SERVER"),
             "mail_port": app.config.get("MAIL_PORT"),
-            "mail_username_configured": bool(app.config.get("MAIL_USERNAME")),
+            "mail_username_configured": bool(mail_username),
             "mail_password_configured": bool(app.config.get("MAIL_PASSWORD")),
-            "mail_sender_configured": bool(app.config.get("MAIL_DEFAULT_SENDER")),
+            "mail_sender_configured": bool(mail_sender),
+            "mail_sender_matches_username": bool(
+                mail_username
+                and sender_email
+                and sender_email.lower() == mail_username.lower()
+            ),
             "secret_key_configured": app.config.get("SECRET_KEY") != "dev-secret-key",
         })
 
