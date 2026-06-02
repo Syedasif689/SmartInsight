@@ -9,6 +9,15 @@ from app.models.user import User
 auth_bp = Blueprint("auth", __name__)
 
 
+def mask_email(email: str) -> str:
+    if "@" not in email:
+        return "***"
+
+    name, domain = email.split("@", 1)
+    visible = name[:2] if len(name) > 2 else name[:1]
+    return f"{visible}***@{domain}"
+
+
 def auth_error(message: str, status_code: int = 500, exc: Exception | None = None):
     if exc is not None:
         current_app.logger.exception(message)
@@ -30,9 +39,9 @@ def mail_error_detail(exc: Exception) -> str:
 
 def otp_error(message: str, exc: Exception | None = None):
     if exc is not None:
-        current_app.logger.exception(message)
+        current_app.logger.exception("[OTP] %s detail=%s", message, mail_error_detail(exc))
     else:
-        current_app.logger.error(message)
+        current_app.logger.error("[OTP] %s", message)
     return render_template(
         "verify.html",
         error=message,
@@ -66,6 +75,7 @@ def login_user(user: User, auth_type: str):
 
 @auth_bp.route("/send-otp", methods=["GET"])
 def send_otp_page():
+    current_app.logger.info("[OTP] GET /send-otp redirected to dashboard")
     return redirect(url_for("dashboard.index"))
 
 
@@ -73,11 +83,27 @@ def send_otp_page():
 def send_otp():
 
     email = (request.form.get("email") or "").strip().lower()
+    current_app.logger.info(
+        "[OTP] POST /send-otp received email=%s remote_addr=%s",
+        mask_email(email),
+        request.headers.get("X-Forwarded-For", request.remote_addr),
+    )
 
     if not email:
         return otp_error("Please enter a valid email address.")
 
     sender = current_app.config.get("MAIL_DEFAULT_SENDER")
+    current_app.logger.info(
+        "[OTP] mail config mail_server=%s mail_port=%s mail_tls=%s "
+        "username_configured=%s password_configured=%s sender_configured=%s",
+        current_app.config.get("MAIL_SERVER"),
+        current_app.config.get("MAIL_PORT"),
+        current_app.config.get("MAIL_USE_TLS"),
+        bool(current_app.config.get("MAIL_USERNAME")),
+        bool(current_app.config.get("MAIL_PASSWORD")),
+        bool(sender),
+    )
+
     if not sender:
         return otp_error(
             "Email login is not configured yet. Please set MAIL_USERNAME, MAIL_PASSWORD, and MAIL_DEFAULT_SENDER on Render."
@@ -90,6 +116,11 @@ def send_otp():
     session["email"] = email
 
     try:
+        current_app.logger.info(
+            "[OTP] sending message email=%s sender=%s",
+            mask_email(email),
+            sender,
+        )
         msg = Message(
             subject="SmartInsight OTP Verification",
             sender=sender,
@@ -97,12 +128,14 @@ def send_otp():
             body=f"Your SmartInsight OTP is: {otp}"
         )
         mail.send(msg)
+        current_app.logger.info("[OTP] mail.send succeeded email=%s", mask_email(email))
     except Exception as exc:
         return otp_error(
             "Unable to send OTP right now. Please check your mail configuration and try again.",
             exc,
         )
 
+    current_app.logger.info("[OTP] redirecting to verify email=%s", mask_email(email))
     return redirect(url_for("auth.verify"))
 
 
@@ -115,6 +148,11 @@ def verify():
 
     # OPEN VERIFY PAGE
     if request.method == "GET":
+        current_app.logger.info(
+            "[OTP] GET /verify has_email_in_session=%s has_otp_in_session=%s",
+            bool(session.get("email")),
+            bool(session.get("otp")),
+        )
         return render_template("verify.html")
 
     # VERIFY OTP
@@ -122,6 +160,12 @@ def verify():
 
     saved_otp = session.get("otp")
     email = session.get("email")
+    current_app.logger.info(
+        "[OTP] POST /verify email=%s has_saved_otp=%s entered_otp_length=%s",
+        mask_email(email or ""),
+        bool(saved_otp),
+        len(entered_otp or ""),
+    )
 
     if not email:
         return auth_error(
@@ -147,10 +191,12 @@ def verify():
         db.session.commit()
 
         login_user(user, "email")
+        current_app.logger.info("[OTP] verification succeeded email=%s", mask_email(email))
 
         return redirect(url_for("dashboard.index"))
 
     # ❌ WRONG OTP CASE
+    current_app.logger.warning("[OTP] invalid OTP email=%s", mask_email(email or ""))
     return render_template(
         "verify.html",
         error="Invalid OTP"

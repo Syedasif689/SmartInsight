@@ -3,6 +3,8 @@ from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.exceptions import HTTPException
 from dotenv import load_dotenv
 import os
+import logging
+import sys
 from urllib.parse import quote_plus
 from email.utils import parseaddr
 
@@ -11,6 +13,23 @@ from app.extensions import db, migrate, oauth, mail
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 load_dotenv()
+
+
+def configure_logging(app):
+    app.logger.setLevel(logging.INFO)
+
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setLevel(logging.INFO)
+    stdout_handler.setFormatter(logging.Formatter(
+        "%(asctime)s %(levelname)s [%(name)s] %(message)s"
+    ))
+
+    if not any(
+        isinstance(handler, logging.StreamHandler)
+        and getattr(handler, "stream", None) is sys.stdout
+        for handler in app.logger.handlers
+    ):
+        app.logger.addHandler(stdout_handler)
 
 
 def database_uri_from_env():
@@ -38,6 +57,7 @@ def database_uri_from_env():
 
 def create_app(config_name="default"):
     app = Flask(__name__)
+    configure_logging(app)
 
     app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
@@ -64,6 +84,20 @@ def create_app(config_name="default"):
     migrate.init_app(app, db)
     oauth.init_app(app)
     mail.init_app(app)
+
+    app.logger.info(
+        "SmartInsight startup: config=%s mail_server=%s mail_port=%s "
+        "mail_username_configured=%s mail_password_configured=%s "
+        "mail_sender_configured=%s db_configured=%s secret_key_configured=%s",
+        config_name,
+        app.config.get("MAIL_SERVER"),
+        app.config.get("MAIL_PORT"),
+        bool(app.config.get("MAIL_USERNAME")),
+        bool(app.config.get("MAIL_PASSWORD")),
+        bool(app.config.get("MAIL_DEFAULT_SENDER")),
+        bool(app.config.get("SQLALCHEMY_DATABASE_URI")),
+        app.config.get("SECRET_KEY") != "dev-secret-key",
+    )
 
     # GOOGLE OAUTH
     oauth.register(
