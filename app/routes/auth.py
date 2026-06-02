@@ -114,10 +114,17 @@ def send_otp_email(recipient: str, otp: str):
         raise RuntimeError("Missing SMTP configuration")
 
     msg = EmailMessage()
-    msg["Subject"] = "SmartInsight OTP Verification"
+    msg["Subject"] = "SmartInsight Verification Code"
     msg["From"] = sender
     msg["To"] = recipient
-    msg.set_content(f"Your SmartInsight OTP is: {otp}")
+    msg.set_content(
+        f"Hello,\n\n"
+        f"Your SmartInsight verification code is: {otp}\n\n"
+        "This code expires in 10 minutes.\n\n"
+        "If you did not request this code, please ignore this email.\n\n"
+        "Thank you,\n"
+        "SmartInsight Team"
+    )
 
     current_app.logger.info(
         "[OTP] SMTP connect start server=%s port=%s timeout=%s tls=%s",

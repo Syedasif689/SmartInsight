@@ -11,11 +11,17 @@
         {% if error_detail %}
           <small>{{ error_detail }}</small>
         {% endif %}
-        <a href="{{ url_for('dashboard.index') }}">Return to login</a>
+        <a href="{{ url_for('dashboard.index') }}">
+          <button type="button">Return to login</button>
+        </a>
       </div>
     {% else %}
       <h2>OTP Verification</h2>
-      <p>Enter the verification code sent to your email</p>
+      <p>Enter the verification code sent to your email.</p>
+      <p class="otp-note">
+        If you do not see the email, please check your Spam/Junk folder and search for
+        "SmartInsight Verification Code." 
+      </p>
 
       <form method="POST">
         <input 
