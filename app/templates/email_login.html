@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Email Login - SmartInsight{% endblock %}
+
+{% block content %}
+<div class="otp-container">
+  <div class="otp-box">
+    <h2>Email Login</h2>
+    <p>Enter your email address to receive a verification code.</p>
+
+    <form action="{{ url_for('auth.send_otp') }}" method="POST">
+      <input
+        type="email"
+        name="email"
+        placeholder="Enter your email"
+        required
+        autocomplete="email"
+      >
+
+      <button type="submit">Send OTP</button>
+    </form>
+
+    <a href="{{ url_for('dashboard.index') }}">Return to dashboard</a>
+  </div>
+</div>
+{% endblock %}

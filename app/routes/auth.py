@@ -73,6 +73,12 @@ def login_user(user: User, auth_type: str):
 # SEND OTP
 # =========================
 
+@auth_bp.route("/email-login", methods=["GET"])
+def email_login():
+    current_app.logger.info("[OTP] GET /email-login")
+    return render_template("email_login.html")
+
+
 @auth_bp.route("/send-otp", methods=["GET"])
 def send_otp_page():
     current_app.logger.info("[OTP] GET /send-otp redirected to dashboard")

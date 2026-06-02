@@ -92,9 +92,9 @@
 
     </a>
 
-    <button
+    <a
+      href="{{ url_for('auth.email_login') }}"
       class="email-login-btn"
-      onclick="openEmailModal()"
     >
 
       <img
@@ -106,7 +106,7 @@
         Continue with Email
       </span>
 
-    </button>
+    </a>
 
   {% endif %}
 
@@ -219,7 +219,7 @@
   <span>Continue with Google</span>
 </a>
 
-<a href="#" class="email-login-btn" onclick="openEmailModal()">
+<a href="{{ url_for('auth.email_login') }}" class="email-login-btn">
   <img src="https://cdn-icons-png.flaticon.com/512/561/561127.png" width="20">
   <span>continue with   Email </span>
 </a>
