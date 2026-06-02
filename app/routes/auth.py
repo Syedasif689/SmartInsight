@@ -4,12 +4,40 @@ from email.message import EmailMessage
 from email.utils import parseaddr
 import random
 import smtplib
+import socket
 import ssl
 
 from app.extensions import oauth, db
 from app.models.user import User
 
 auth_bp = Blueprint("auth", __name__)
+
+
+class IPv4SMTP(smtplib.SMTP):
+    def _get_socket(self, host, port, timeout):
+        self._print_debug("connect:", (host, port))
+
+        last_error = None
+        for family, socktype, proto, _, sockaddr in socket.getaddrinfo(
+            host,
+            port,
+            socket.AF_INET,
+            socket.SOCK_STREAM,
+        ):
+            smtp_socket = socket.socket(family, socktype, proto)
+            smtp_socket.settimeout(timeout)
+
+            try:
+                smtp_socket.connect(sockaddr)
+                return smtp_socket
+            except OSError as exc:
+                last_error = exc
+                smtp_socket.close()
+
+        if last_error:
+            raise last_error
+
+        raise OSError(f"No IPv4 address found for {host}:{port}")
 
 
 def mask_email(email: str) -> str:
@@ -99,7 +127,7 @@ def send_otp_email(recipient: str, otp: str):
         use_tls,
     )
 
-    with smtplib.SMTP(server, port, timeout=timeout) as smtp:
+    with IPv4SMTP(server, port, timeout=timeout) as smtp:
         current_app.logger.info("[OTP] SMTP connected")
         smtp.ehlo()
 
