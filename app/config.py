@@ -27,6 +27,7 @@ class BaseConfig:
     MAIL_SERVER = env_value("MAIL_SERVER", "smtp.gmail.com")
     MAIL_PORT = env_int("MAIL_PORT", 587)
     MAIL_USE_TLS = env_bool("MAIL_USE_TLS", True)
+    MAIL_TIMEOUT = env_int("MAIL_TIMEOUT", 10)
 
     MAIL_USERNAME = env_value("MAIL_USERNAME")
     MAIL_PASSWORD = env_value("MAIL_PASSWORD")

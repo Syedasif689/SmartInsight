@@ -86,12 +86,13 @@ def create_app(config_name="default"):
     mail.init_app(app)
 
     app.logger.info(
-        "SmartInsight startup: config=%s mail_server=%s mail_port=%s "
+        "SmartInsight startup: config=%s mail_server=%s mail_port=%s mail_timeout=%s "
         "mail_username_configured=%s mail_password_configured=%s "
         "mail_sender_configured=%s db_configured=%s secret_key_configured=%s",
         config_name,
         app.config.get("MAIL_SERVER"),
         app.config.get("MAIL_PORT"),
+        app.config.get("MAIL_TIMEOUT"),
         bool(app.config.get("MAIL_USERNAME")),
         bool(app.config.get("MAIL_PASSWORD")),
         bool(app.config.get("MAIL_DEFAULT_SENDER")),
@@ -131,6 +132,7 @@ def create_app(config_name="default"):
             "database_configured": bool(app.config.get("SQLALCHEMY_DATABASE_URI")),
             "mail_server": app.config.get("MAIL_SERVER"),
             "mail_port": app.config.get("MAIL_PORT"),
+            "mail_timeout": app.config.get("MAIL_TIMEOUT"),
             "mail_username_configured": bool(mail_username),
             "mail_password_configured": bool(app.config.get("MAIL_PASSWORD")),
             "mail_sender_configured": bool(mail_sender),

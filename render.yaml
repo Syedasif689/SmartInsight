@@ -29,6 +29,8 @@ services:
         value: 587
       - key: MAIL_USE_TLS
         value: true
+      - key: MAIL_TIMEOUT
+        value: 10
       - key: MAIL_USERNAME
         sync: false
       - key: MAIL_PASSWORD
