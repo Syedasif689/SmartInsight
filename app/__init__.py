@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, render_template, request
 from werkzeug.exceptions import RequestEntityTooLarge
+from werkzeug.exceptions import HTTPException
 from dotenv import load_dotenv
 import os
 from urllib.parse import quote_plus
@@ -114,6 +115,9 @@ def create_app(config_name="default"):
 
     @app.errorhandler(Exception)
     def handle_error(error):
+        if isinstance(error, HTTPException):
+            return error
+
         app.logger.exception("Unhandled exception")
         return render_template("dashboard.html", error="Unexpected error"), 500
 

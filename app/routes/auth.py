@@ -64,6 +64,11 @@ def login_user(user: User, auth_type: str):
 # SEND OTP
 # =========================
 
+@auth_bp.route("/send-otp", methods=["GET"])
+def send_otp_page():
+    return redirect(url_for("dashboard.index"))
+
+
 @auth_bp.route("/send-otp", methods=["POST"])
 def send_otp():
 
