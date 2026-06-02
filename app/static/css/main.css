@@ -922,20 +922,24 @@ tbody tr:hover {
 
 @media (max-width: 768px) {
   .dashboard-content { padding: 16px; }
+  .dashboard-main { gap: 18px; }
   .kpi-grid { grid-template-columns: 1fr; }
-  .section-heading { flex-direction: column; align-items: flex-start; }
+  .section-heading { flex-direction: column; align-items: flex-start; gap: 14px; }
   .dashboard-actions { width: 100%; margin-top: 14px; }
   .dashboard-actions .primary-btn { width: 100%; }
   .dataset-meta { width: 100%; justify-content: flex-start; }
   .dataset-meta span { flex: 1 1 auto; min-width: 120px; }
   .uploads-header { flex-direction: column; align-items: stretch; }
   .uploads-header a.primary-btn { width: 100%; }
-  .chart-panel { min-height: 320px; }
+  .chart-panel { min-height: 260px; }
   .chart-canvas-wrap { height: 220px; }
   .history-card-body { grid-template-columns: 1fr; }
-  .dropzone { padding: 32px 16px; }
+  .dropzone { padding: 28px 14px; }
   .upload-icon svg { width: 40px; height: 40px; }
   .upload-text h3 { font-size: 1rem; }
+  .otp-box { width: 100%; padding: 24px; }
+  .otp-box input { font-size: 16px; letter-spacing: 2px; }
+  .otp-box button { padding: 14px; }
 }
 
 @media (max-width: 480px) {
@@ -1466,7 +1470,7 @@ tbody tr:hover {
 }
 
 .otp-box {
-  width: 340px;
+  width: min(92vw, 420px);
   padding: 32px;
   border-radius: 12px;
   background: #111a2e;
@@ -1482,8 +1486,15 @@ tbody tr:hover {
 
 .otp-box p {
   font-size: 13px;
-  opacity: 0.7;
+  opacity: 0.8;
   margin-bottom: 20px;
+}
+
+.otp-note {
+  font-size: 0.92rem;
+  color: rgba(255,255,255,0.75);
+  line-height: 1.6;
+  margin: 18px 0 0;
 }
 
 .otp-box input {
