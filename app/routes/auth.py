@@ -17,6 +17,14 @@ def auth_error(message: str, status_code: int = 500, exc: Exception | None = Non
     return render_template("verify.html", error=message), status_code
 
 
+def otp_error(message: str, exc: Exception | None = None):
+    if exc is not None:
+        current_app.logger.exception(message)
+    else:
+        current_app.logger.error(message)
+    return render_template("verify.html", error=message), 200
+
+
 # =========================
 # OTP GENERATOR
 # =========================
@@ -44,10 +52,16 @@ def login_user(user: User, auth_type: str):
 @auth_bp.route("/send-otp", methods=["POST"])
 def send_otp():
 
-    email = request.form.get("email")
+    email = (request.form.get("email") or "").strip().lower()
 
     if not email:
-        return auth_error("Please enter a valid email address.", 400)
+        return otp_error("Please enter a valid email address.")
+
+    sender = current_app.config.get("MAIL_DEFAULT_SENDER")
+    if not sender:
+        return otp_error(
+            "Email login is not configured yet. Please set MAIL_USERNAME, MAIL_PASSWORD, and MAIL_DEFAULT_SENDER on Render."
+        )
 
     otp = generate_otp()
 
@@ -58,14 +72,14 @@ def send_otp():
     try:
         msg = Message(
             subject="SmartInsight OTP Verification",
+            sender=sender,
             recipients=[email],
             body=f"Your SmartInsight OTP is: {otp}"
         )
         mail.send(msg)
     except Exception as exc:
-        return auth_error(
+        return otp_error(
             "Unable to send OTP right now. Please check your mail configuration and try again.",
-            500,
             exc,
         )
 

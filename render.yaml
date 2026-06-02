@@ -24,15 +24,24 @@ services:
       - key: GOOGLE_CLIENT_SECRET
         sync: false
       - key: MAIL_SERVER
+        value: smtp.gmail.com
       - key: MAIL_PORT
+        value: 587
       - key: MAIL_USE_TLS
+        value: true
       - key: MAIL_USERNAME
         sync: false
       - key: MAIL_PASSWORD
         sync: false
       - key: MAIL_DEFAULT_SENDER
+        sync: false
       - key: MAX_UPLOAD_MB
+        value: 200
       - key: FAST_ANALYSIS_ROW_LIMIT
+        value: 10000
       - key: COLUMN_SCAN_ROW_LIMIT
+        value: 1000
       - key: DUPLICATE_CHECK_MAX_MB
+        value: 5
       - key: UPLOAD_FOLDER
+        value: uploads

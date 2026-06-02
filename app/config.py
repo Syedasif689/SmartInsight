@@ -2,32 +2,47 @@ import os
 from pathlib import Path
 
 
-class BaseConfig:
-    MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com")
-    MAIL_PORT = int(os.getenv("MAIL_PORT", 587))
-    MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "True") == "True"
+def env_value(name: str, default=None):
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        return default
+    return value
 
-    MAIL_USERNAME = os.getenv("MAIL_USERNAME")
-    MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
-    MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER")
-    SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key")
-    SQLALCHEMY_DATABASE_URI = os.getenv(
+
+def env_int(name: str, default: int) -> int:
+    value = env_value(name)
+    if value is None:
+        return default
+    return int(value)
+
+
+def env_bool(name: str, default: bool) -> bool:
+    value = env_value(name)
+    if value is None:
+        return default
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+class BaseConfig:
+    MAIL_SERVER = env_value("MAIL_SERVER", "smtp.gmail.com")
+    MAIL_PORT = env_int("MAIL_PORT", 587)
+    MAIL_USE_TLS = env_bool("MAIL_USE_TLS", True)
+
+    MAIL_USERNAME = env_value("MAIL_USERNAME")
+    MAIL_PASSWORD = env_value("MAIL_PASSWORD")
+    MAIL_DEFAULT_SENDER = env_value("MAIL_DEFAULT_SENDER", MAIL_USERNAME)
+    SECRET_KEY = env_value("SECRET_KEY", "dev-secret-key")
+    SQLALCHEMY_DATABASE_URI = env_value(
         "DATABASE_URL",
         f"sqlite:///{Path.cwd() / 'smartinsight.db'}",
     )
     JSON_SORT_KEYS = False
-    MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "200"))
+    MAX_UPLOAD_MB = env_int("MAX_UPLOAD_MB", 200)
     MAX_CONTENT_LENGTH = MAX_UPLOAD_MB * 1024 * 1024
-    FAST_ANALYSIS_ROW_LIMIT = int(
-        os.getenv("FAST_ANALYSIS_ROW_LIMIT", "10000")
-    )
-    COLUMN_SCAN_ROW_LIMIT = int(
-        os.getenv("COLUMN_SCAN_ROW_LIMIT", "1000")
-    )
-    DUPLICATE_CHECK_MAX_MB = int(
-        os.getenv("DUPLICATE_CHECK_MAX_MB", "5")
-    )
-    UPLOAD_FOLDER = os.getenv(
+    FAST_ANALYSIS_ROW_LIMIT = env_int("FAST_ANALYSIS_ROW_LIMIT", 10000)
+    COLUMN_SCAN_ROW_LIMIT = env_int("COLUMN_SCAN_ROW_LIMIT", 1000)
+    DUPLICATE_CHECK_MAX_MB = env_int("DUPLICATE_CHECK_MAX_MB", 5)
+    UPLOAD_FOLDER = env_value(
         "UPLOAD_FOLDER",
         str(Path.cwd() / "uploads"),
     )
