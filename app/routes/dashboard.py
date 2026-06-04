@@ -253,11 +253,19 @@ def view_dashboard(file_id: str):
         current_app.logger.info(f"Dashboard generation started for file: {safe_file_id}")
         import time
         start_time = time.time()
-        
-        dashboard = generate_dashboard_from_file(file_path)
-        
+
+        # Fast-mode for smaller files to reduce processing time
+        try:
+            file_size_mb = file_path.stat().st_size / (1024 * 1024)
+        except Exception:
+            file_size_mb = None
+
+        fast_mode = (file_size_mb is not None and file_size_mb <= 20)
+
+        dashboard = generate_dashboard_from_file(file_path, fast=fast_mode)
+
         elapsed = time.time() - start_time
-        current_app.logger.info(f"Dashboard generation completed in {elapsed:.2f}s for file: {safe_file_id}")
+        current_app.logger.info(f"Dashboard generation completed in {elapsed:.2f}s for file: {safe_file_id} (fast={fast_mode})")
 
     except Exception as e:
 

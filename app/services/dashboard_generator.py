@@ -27,7 +27,7 @@ DEFAULT_COLUMN_SCAN_ROW_LIMIT = 500  # Reduced from 1K for speed
 # MAIN DASHBOARD GENERATOR
 # =========================================================
 
-def generate_dashboard_from_file(file_path: str | Path) -> dict[str, Any]:
+def generate_dashboard_from_file(file_path: str | Path, fast: bool = False) -> dict[str, Any]:
 
     path = Path(file_path)
 
@@ -105,6 +105,7 @@ def generate_dashboard_from_file(file_path: str | Path) -> dict[str, Any]:
             categorical_columns,
             total_rows=dataset_info.get("total_rows"),
             sampled=dataset_info["sampled"],
+            fast=fast,
         ),
 
         "chart_data": _build_charts(
@@ -113,6 +114,7 @@ def generate_dashboard_from_file(file_path: str | Path) -> dict[str, Any]:
             continuous_numeric_columns,
             categorical_columns,
             date_columns,
+            fast=fast,
         ),
 
         "insights": _build_insights(
@@ -121,6 +123,7 @@ def generate_dashboard_from_file(file_path: str | Path) -> dict[str, Any]:
             continuous_numeric_columns,
             categorical_columns,
             date_columns,
+            fast=fast,
         ),
 
         "summary_statistics": _build_summary_statistics(
@@ -402,12 +405,16 @@ def _build_charts(
     continuous_numeric_columns: list[str],
     categorical_columns: list[str],
     date_columns: list[str],
+    fast: bool = False,
 ) -> list[dict[str, Any]]:
 
     charts = []
 
+    # For fast mode, operate on a small sample to speed up calculations
+    sample_df = dataframe.head(2000) if fast else dataframe
+
     metric = _best_metric_column(
-        dataframe,
+        sample_df,
         continuous_numeric_columns or numeric_columns,
     )
 
@@ -423,7 +430,7 @@ def _build_charts(
     if date_columns and metric:
 
         line_chart = _line_chart(
-            dataframe,
+            sample_df,
             date_columns[0],
             metric,
         )
@@ -438,7 +445,7 @@ def _build_charts(
     if category and metric:
 
         bar_chart = _bar_chart(
-            dataframe,
+            sample_df,
             category,
             metric,
         )
@@ -466,7 +473,7 @@ def _build_charts(
     # --------------------------------
 
     scatter_chart = _scatter_chart(
-        dataframe,
+        sample_df,
         continuous_numeric_columns or numeric_columns,
     )
 
@@ -480,7 +487,7 @@ def _build_charts(
     if metric:
 
         histogram = _histogram_chart(
-            dataframe,
+            sample_df,
             metric,
         )
 
@@ -494,7 +501,7 @@ def _build_charts(
     for column in categorical_columns[:2]:
 
         donut_chart = _donut_chart(
-            dataframe,
+            sample_df,
             column,
         )
 
@@ -973,7 +980,11 @@ def _build_insights(
     continuous_numeric_columns,
     categorical_columns,
     date_columns,
+    fast: bool = False,
 ):
+
+    if fast:
+        return []
 
     insights = []
 
@@ -1530,6 +1541,7 @@ def _build_kpis(
     categorical_columns,
     total_rows=None,
     sampled=False,
+    fast: bool = False,
 ):
 
     missing = int(dataframe.isna().sum().sum())

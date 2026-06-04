@@ -639,7 +639,6 @@ const uploadBtn = document.getElementById("uploadBtn");
 
 let selectedFile = null;
 let isUploading = false;
-let uploadPending = false;
 
 /* =========================
    DRAG & DROP SUPPORT
@@ -676,7 +675,7 @@ fileInput.addEventListener("change", (e) => {
 });
 
 function handleFileSelection(file) {
-    if (!file || isUploading || uploadPending) return;
+  if (!file || isUploading) return;
     
     // Validate file type
     const allowedTypes = ['text/csv', 'application/vnd.ms-excel', 
@@ -723,103 +722,95 @@ function handleFileSelection(file) {
 /* =========================
    FILE UPLOAD (USER CLICK ONLY)
 ========================= */
-uploadBtn.addEventListener("click", async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+uploadBtn.addEventListener("click", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
     
-    if (!selectedFile || isUploading || uploadPending) {
-        return;
+  if (!selectedFile || isUploading) {
+    return;
+  }
+    
+  isUploading = true;
+  uploadBtn.disabled = true;
+  fileInput.disabled = true;
+  uploadBtn.innerHTML = "Uploading...";
+    
+  const formData = new FormData();
+  formData.append("dataset", selectedFile);
+    
+  const progressBar = document.querySelector(".upload-progress-modern");
+  const progressFill = document.querySelector(".progress-fill");
+  const progressText = document.querySelector(".progress-text");
+  const progressHint = document.querySelector(".progress-hint");
+    
+  progressBar.style.display = "block";
+  progressFill.style.width = "0%";
+  progressHint.style.display = "none";
+    
+  const sizeMB = selectedFile.size / (1024 * 1024);
+  if (sizeMB > 20) {
+    progressHint.style.display = "block";
+  }
+    
+  const xhr = new XMLHttpRequest();
+  xhr.timeout = 300000; // 5 minutes
+
+  xhr.upload.addEventListener("progress", (event) => {
+    if (event.lengthComputable) {
+      const percentComplete = (event.loaded / event.total) * 100;
+      progressFill.style.width = Math.min(percentComplete, 99) + "%";
+      progressText.textContent = `Uploading... ${Math.round(percentComplete)}%`;
     }
-    
-    uploadPending = true;
-    isUploading = true;
-    uploadBtn.disabled = true;
-    fileInput.disabled = true;
-    uploadBtn.innerHTML = "Uploading...";
-    
-    const formData = new FormData();
-    formData.append("dataset", selectedFile);
-    
+  });
+
+  function failUpload(message) {
+    console.error(message);
+    alert("Upload failed: " + message);
+    resetUpload();
+  }
+
+  xhr.addEventListener("load", () => {
+    if (xhr.status < 200 || xhr.status >= 400) {
+      failUpload(`Server returned ${xhr.status}`);
+      return;
+    }
+
+    progressFill.style.width = "100%";
+    uploadBtn.innerHTML = "Processing...";
+    progressText.textContent = "Processing your data...";
+
     try {
-        const progressBar = document.querySelector(".upload-progress-modern");
-        const progressFill = document.querySelector(".progress-fill");
-        const progressText = document.querySelector(".progress-text");
-        const progressHint = document.querySelector(".progress-hint");
-        
-        progressBar.style.display = "block";
-        progressFill.style.width = "0%";
-        
-        // Show hint for files > 20MB
-        const sizeMB = selectedFile.size / (1024 * 1024);
-        if (sizeMB > 20) {
-            progressHint.style.display = "block";
-        }
-        
-        const xhr = new XMLHttpRequest();
-        
-        // Track upload progress
-        xhr.upload.addEventListener("progress", (e) => {
-            if (e.lengthComputable) {
-                const percentComplete = (e.loaded / e.total) * 100;
-                progressFill.style.width = Math.min(percentComplete, 99) + "%";
-                progressText.textContent = `Uploading... ${Math.round(percentComplete)}%`;
-            }
-        });
-        
-        // Handle upload completion
-        xhr.addEventListener("load", () => {
-            if (xhr.status === 200 || xhr.status === 302 || xhr.status === 301) {
-                progressFill.style.width = "100%";
-                uploadBtn.innerHTML = "Processing...";
-                progressText.textContent = "Processing your data (this may take a moment)...";
-                
-                try {
-                    const response = JSON.parse(xhr.responseText);
-                    if (response.dashboard_url) {
-                        setTimeout(() => {
-                            window.location.href = response.dashboard_url;
-                        }, 800);
-                        return;
-                    }
-                } catch (e) {
-                    // Response might be redirect
-                    if (xhr.responseURL && xhr.responseURL !== window.location.href) {
-                        setTimeout(() => {
-                            window.location.href = xhr.responseURL;
-                        }, 800);
-                        return;
-                    }
-                }
-                
-                throw new Error("No dashboard URL received");
-            }
-            
-            throw new Error(`Upload failed with status ${xhr.status}: ${xhr.statusText}`);
-        });
-        
-        xhr.addEventListener("error", () => {
-            throw new Error("Network error during upload");
-        });
-        
-        xhr.addEventListener("abort", () => {
-            throw new Error("Upload was cancelled");
-        });
-        
-        xhr.addEventListener("timeout", () => {
-            throw new Error("Upload timed out");
-        });
-        
-        xhr.timeout = 300000; // 5 minutes
-        xhr.open("POST", "/upload", true);
-        xhr.send(formData);
-        
-    } catch (error) {
-        console.error(error);
-        alert("Failed: " + error.message);
-        resetUpload();
-    } finally {
-        uploadPending = false;
+      const response = JSON.parse(xhr.responseText);
+      if (response.dashboard_url) {
+        window.location.href = response.dashboard_url;
+        return;
+      }
+    } catch (err) {
+      // If response is not JSON, fall through to URL redirect logic.
     }
+
+    if (xhr.responseURL && xhr.responseURL !== window.location.href) {
+      window.location.href = xhr.responseURL;
+      return;
+    }
+
+    failUpload("No dashboard URL returned from server.");
+  });
+
+  xhr.addEventListener("error", () => {
+    failUpload("Network error during upload.");
+  });
+
+  xhr.addEventListener("abort", () => {
+    failUpload("Upload was cancelled.");
+  });
+
+  xhr.addEventListener("timeout", () => {
+    failUpload("Upload timed out.");
+  });
+
+  xhr.open("POST", "/upload", true);
+  xhr.send(formData);
 });
 
 /* =========================
@@ -834,7 +825,6 @@ document.querySelector(".remove-file")?.addEventListener("click", (e) => {
 function resetFileInput() {
     selectedFile = null;
     isUploading = false;
-    uploadPending = false;
     fileInput.value = "";
     fileInput.disabled = false;
     document.querySelector(".file-preview").style.display = "none";
@@ -846,10 +836,13 @@ function resetFileInput() {
 
 function resetUpload() {
     isUploading = false;
-    uploadPending = false;
+  selectedFile = null;
     uploadBtn.innerHTML = "Try Again";
     uploadBtn.disabled = false;
     fileInput.disabled = false;
+    fileInput.value = "";
+    document.querySelector(".file-preview").style.display = "none";
+    document.querySelector(".progress-hint").style.display = "none";
     document.querySelector(".upload-progress-modern").style.display = "none";
     document.querySelector(".progress-fill").style.width = "0%";
 }
