@@ -683,15 +683,20 @@ class ModernUploader {
       // Simulate progress
       await this.simulateUpload();
       
-      // Send to server - use the correct endpoint
+      // Send to server - use the correct endpoint with 5 minute timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000); // 5 minutes
+      
       const response = await fetch('/upload', {
         method: 'POST',
         body: formData,
         headers: {
           Accept: 'application/json',
         },
+        signal: controller.signal,
       });
       
+      clearTimeout(timeoutId);
       const result = await response.json().catch(() => ({}));
 
       if (response.ok) {
@@ -705,7 +710,11 @@ class ModernUploader {
       
     } catch (error) {
       console.error('Upload error:', error);
-      this.uploadError('Failed to upload file. Please try again.');
+      if (error.name === 'AbortError') {
+        this.uploadError('Upload took too long (timeout). Please try a smaller file.');
+      } else {
+        this.uploadError('Failed to upload file. Please try again.');
+      }
     }
   }
   

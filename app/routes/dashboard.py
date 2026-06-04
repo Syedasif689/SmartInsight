@@ -115,6 +115,8 @@ def upload_file():
             uploaded_file.filename
         )
 
+        current_app.logger.info(f"Upload started: {original_name} (size: {uploaded_file.content_length or '?'} bytes)")
+
         # =====================================================
         # DUPLICATE DETECTION
         # =====================================================
@@ -191,7 +193,7 @@ def upload_file():
 
     except Exception as e:
 
-        current_app.logger.error(str(e))
+        current_app.logger.error(f"Upload failed for {original_name}: {str(e)}", exc_info=True)
 
         return error_response(
             f"Failed to process dataset file: {str(e)}",
@@ -228,12 +230,20 @@ def view_dashboard(file_id: str):
 
     try:
 
+        current_app.logger.info(f"Dashboard generation started for file: {safe_file_id}")
+        import time
+        start_time = time.time()
+        
         dashboard = generate_dashboard_from_file(file_path)
+        
+        elapsed = time.time() - start_time
+        current_app.logger.info(f"Dashboard generation completed in {elapsed:.2f}s for file: {safe_file_id}")
 
     except Exception as e:
 
         current_app.logger.error(
-            f"Dashboard error: {str(e)}"
+            f"Dashboard error for {safe_file_id}: {str(e)}",
+            exc_info=True
         )
 
         return render_template(
