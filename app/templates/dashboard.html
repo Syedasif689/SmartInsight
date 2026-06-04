@@ -200,6 +200,9 @@
               <div class="progress-fill"></div>
             </div>
             <span class="progress-text">Uploading...</span>
+            <small class="progress-hint" style="display: none; margin-top: 8px; color: #666; font-size: 12px;">
+              Large files may take longer to process. Please wait...
+            </small>
           </div>
           
     {% if session.get("user") %}
@@ -635,81 +638,223 @@ const dropzone = document.getElementById("dropzone");
 const uploadBtn = document.getElementById("uploadBtn");
 
 let selectedFile = null;
+let isUploading = false;
+const CHUNK_SIZE = 1024 * 1024 * 5; // 5MB chunks
 
 /* =========================
-   OPEN FILE PICKER
+   OPEN FILE PICKER (Only Once)
 ========================= */
 dropzone.addEventListener("click", () => {
-    fileInput.click();
+    if (!isUploading && !selectedFile) {
+        fileInput.click();
+    }
 });
 
 /* =========================
-   FILE SELECT
+   DRAG & DROP SUPPORT
+========================= */
+dropzone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropzone.style.borderColor = "#2563eb";
+    dropzone.style.backgroundColor = "#f0f9ff";
+});
+
+dropzone.addEventListener("dragleave", () => {
+    dropzone.style.borderColor = "#e5e7eb";
+    dropzone.style.backgroundColor = "transparent";
+});
+
+dropzone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropzone.style.borderColor = "#e5e7eb";
+    dropzone.style.backgroundColor = "transparent";
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        handleFileSelection(files[0]);
+    }
+});
+
+/* =========================
+   FILE SELECT - AUTO UPLOAD
 ========================= */
 fileInput.addEventListener("change", (e) => {
-    selectedFile = e.target.files[0];
+    if (e.target.files.length > 0) {
+        handleFileSelection(e.target.files[0]);
+    }
+});
 
-    if (selectedFile) {
-        document.querySelector(".file-preview").style.display = "block";
+function handleFileSelection(file) {
+    if (!file) return;
+    
+    // Validate file type
+    const allowedTypes = ['text/csv', 'application/vnd.ms-excel', 
+                         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+    const allowedExtensions = ['.csv', '.xls', '.xlsx'];
+    const hasValidType = allowedTypes.includes(file.type) || 
+                         allowedExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
+    
+    if (!hasValidType) {
+        alert("Invalid file type. Please upload CSV or Excel files only.");
+        resetFileInput();
+        return;
+    }
+    
+    selectedFile = file;
+    
+    // Show file preview
+    const filePreview = document.querySelector(".file-preview");
+    filePreview.style.display = "block";
+    document.querySelector(".file-name").textContent = selectedFile.name;
+    
+    // Show file size in MB for large files
+    const sizeMB = (selectedFile.size / (1024 * 1024)).toFixed(2);
+    const sizeText = sizeMB > 1 
+        ? `${sizeMB} MB`
+        : `${(selectedFile.size / 1024).toFixed(1)} KB`;
+    
+    document.querySelector(".file-size").textContent = sizeText;
+    
+    // Show warning for very large files
+    if (sizeMB > 100) {
+        document.querySelector(".file-size").innerHTML += 
+            ' <span style="color: #f97316; font-weight: bold;">(Large file - may take 1-3 minutes)</span>';
+    } else if (sizeMB > 50) {
+        document.querySelector(".file-size").innerHTML += 
+            ' <span style="color: #ea580c; font-weight: bold;">(May take 30-60 seconds)</span>';
+    }
+    
+    // Auto-upload after brief delay
+    uploadBtn.disabled = false;
+    setTimeout(() => {
+        if (selectedFile && !isUploading) {
+            uploadFile();
+        }
+    }, 500);
+}
 
-        document.querySelector(".file-name").textContent = selectedFile.name;
+/* =========================
+   FILE UPLOAD WITH PROGRESS
+========================= */
+async function uploadFile() {
+    if (!selectedFile || isUploading) {
+        return;
+    }
+    
+    isUploading = true;
+    uploadBtn.disabled = true;
+    fileInput.disabled = true;
+    
+    const formData = new FormData();
+    formData.append("dataset", selectedFile);
+    
+    try {
+        uploadBtn.innerHTML = "Uploading...";
+        
+        const progressBar = document.querySelector(".upload-progress-modern");
+        const progressFill = document.querySelector(".progress-fill");
+        const progressText = document.querySelector(".progress-text");
+        const progressHint = document.querySelector(".progress-hint");
+        
+        progressBar.style.display = "block";
+        
+        // Show hint for large files
+        const sizeMB = selectedFile.size / (1024 * 1024);
+        if (sizeMB > 50) {
+            progressHint.style.display = "block";
+        }
+        
+        const xhr = new XMLHttpRequest();
+        
+        // Track upload progress
+        xhr.upload.addEventListener("progress", (e) => {
+            if (e.lengthComputable) {
+                const percentComplete = (e.loaded / e.total) * 100;
+                progressFill.style.width = percentComplete + "%";
+                progressText.textContent = `Uploading... ${Math.round(percentComplete)}%`;
+            }
+        });
+        
+        // Handle upload completion
+        xhr.addEventListener("load", () => {
+            if (xhr.status === 200 || xhr.status === 302 || xhr.status === 301) {
+                uploadBtn.innerHTML = "Processing...";
+                progressText.textContent = "Processing your data...";
+                
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    if (response.dashboard_url) {
+                        setTimeout(() => {
+                            window.location.href = response.dashboard_url;
+                        }, 1000);
+                        return;
+                    }
+                } catch (e) {
+                    // Response might be redirect
+                    if (xhr.responseURL && xhr.responseURL !== window.location.href) {
+                        setTimeout(() => {
+                            window.location.href = xhr.responseURL;
+                        }, 1000);
+                        return;
+                    }
+                }
+            }
+            
+            throw new Error(`Upload failed with status ${xhr.status}`);
+        });
+        
+        xhr.addEventListener("error", () => {
+            throw new Error("Network error during upload");
+        });
+        
+        xhr.addEventListener("abort", () => {
+            throw new Error("Upload was cancelled");
+        });
+        
+        xhr.open("POST", "/upload", true);
+        xhr.send(formData);
+        
+    } catch (error) {
+        console.error(error);
+        alert("Failed to process dataset: " + error.message);
+        resetUpload();
+    }
+}
 
-        document.querySelector(".file-size").textContent =
-            (selectedFile.size / 1024).toFixed(1) + " KB";
-
-        uploadBtn.disabled = false;
+/* =========================
+   MANUAL UPLOAD BUTTON
+========================= */
+uploadBtn.addEventListener("click", () => {
+    if (selectedFile && !isUploading) {
+        uploadFile();
     }
 });
 
 /* =========================
-   ANALYZE BUTTON (FIXED)
+   REMOVE FILE
 ========================= */
-uploadBtn.addEventListener("click", async () => {
-
-    if (!selectedFile) {
-        alert("Please choose a dataset file.");
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append("dataset", selectedFile);
-
-    try {
-
-        uploadBtn.innerHTML = "Processing...";
-        uploadBtn.disabled = true;
-
-        const response = await fetch("/upload", {
-            method: "POST",
-            body: formData
-        });
-
-        /* ❌ OLD WRONG: response.url */
-
-        /* ✅ FIX: read redirect properly */
-        if (response.redirected) {
-            window.location.href = response.url;
-            return;
-        }
-
-        /* If backend returns JSON (duplicate case etc.) */
-        const data = await response.json().catch(() => null);
-
-        if (data && data.dashboard_url) {
-            window.location.href = data.dashboard_url;
-            return;
-        }
-
-        throw new Error("Upload failed");
-
-    } catch (error) {
-
-        console.error(error);
-        alert("Failed to process dataset file.");
-
-        uploadBtn.innerHTML = "Analyze Dataset";
-        uploadBtn.disabled = false;
-    }
+document.querySelector(".remove-file")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    resetFileInput();
 });
+
+function resetFileInput() {
+    selectedFile = null;
+    isUploading = false;
+    fileInput.value = "";
+    fileInput.disabled = false;
+    document.querySelector(".file-preview").style.display = "none";
+    document.querySelector(".upload-progress-modern").style.display = "none";
+    uploadBtn.innerHTML = "Analyze Dataset";
+    uploadBtn.disabled = true;
+}
+
+function resetUpload() {
+    isUploading = false;
+    uploadBtn.innerHTML = "Try Again";
+    uploadBtn.disabled = false;
+    fileInput.disabled = false;
+    document.querySelector(".upload-progress-modern").style.display = "none";
+}
 </script>
 {% endblock %}

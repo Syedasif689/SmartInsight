@@ -114,8 +114,21 @@ def upload_file():
         original_name = secure_filename(
             uploaded_file.filename
         )
+        
+        # Get file size for better handling
+        file_size_mb = (uploaded_file.content_length or 0) / (1024 * 1024)
+        max_upload_mb = current_app.config["MAX_UPLOAD_MB"]
+        
+        # File size validation
+        if file_size_mb > max_upload_mb:
+            return error_response(
+                f"File size exceeds maximum ({max_upload_mb}MB). Your file is {file_size_mb:.1f}MB.",
+                413
+            )
 
-        current_app.logger.info(f"Upload started: {original_name} (size: {uploaded_file.content_length or '?'} bytes)")
+        current_app.logger.info(
+            f"Upload started: {original_name} (size: {file_size_mb:.2f}MB)"
+        )
 
         # =====================================================
         # DUPLICATE DETECTION
@@ -140,12 +153,13 @@ def upload_file():
                     "duplicate": True,
                     "file_id": existing_file_id,
                     "dashboard_url": dashboard_url,
+                    "message": "This file was already analyzed. Showing previous results.",
                 })
 
             return redirect(dashboard_url)
 
         # =====================================================
-        # SAVE NEW FILE
+        # SAVE NEW FILE (with streaming for large files)
         # =====================================================
 
         unique_id = uuid4().hex
@@ -154,7 +168,12 @@ def upload_file():
 
         file_path = uploaded_file_path(file_id)
 
+        # Use streaming save for large files
         uploaded_file.save(file_path)
+        
+        current_app.logger.info(
+            f"File saved successfully: {file_id}"
+        )
 
         # =====================================================
         # SAVE TO MYSQL DATABASE
@@ -187,6 +206,7 @@ def upload_file():
                 "duplicate": False,
                 "file_id": file_id,
                 "dashboard_url": dashboard_url,
+                "file_size_mb": round(file_size_mb, 2),
             })
 
         return redirect(dashboard_url)

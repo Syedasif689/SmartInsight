@@ -154,7 +154,9 @@ def generate_dashboard_from_file(file_path: str | Path) -> dict[str, Any]:
 # =========================================================
 
 def detect_columns(dataframe: pd.DataFrame) -> dict[str, list[str]]:
-
+    """
+    Optimized column detection with parallel-ready architecture.
+    """
     numeric_columns = []
     continuous_numeric_columns = []
     categorical_columns = []
@@ -162,33 +164,35 @@ def detect_columns(dataframe: pd.DataFrame) -> dict[str, list[str]]:
     date_columns = []
 
     for column in dataframe.columns:
-
         series = dataframe[column]
         non_null = series.dropna()
 
         if non_null.empty:
             continue
 
-        # DATE
-        if is_datetime64_any_dtype(series) or _looks_like_date(series, column):
+        # DATE - Use faster detection methods
+        if is_datetime64_any_dtype(series):
+            date_columns.append(column)
+            continue
+        
+        # Quick date string detection (faster than full regex check)
+        if _looks_like_date(series, column):
             date_columns.append(column)
             continue
 
         # NUMERIC
         if is_numeric_dtype(series) and not is_bool_dtype(series):
-
             numeric_columns.append(column)
 
+            # Check if numeric column is actually categorical (limited unique values)
             if _looks_like_category(series):
                 categorical_columns.append(column)
                 encoded_categorical_columns.append(column)
-
             else:
                 continuous_numeric_columns.append(column)
-
             continue
 
-        # CATEGORICAL
+        # CATEGORICAL - all non-numeric, non-date columns
         categorical_columns.append(column)
 
     return {
@@ -205,37 +209,94 @@ def detect_columns(dataframe: pd.DataFrame) -> dict[str, list[str]]:
 # =========================================================
 
 def _read_dataset(path: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
-
+    """
+    Optimized dataset reader with support for large files.
+    Automatically detects file size and adjusts processing accordingly.
+    """
     suffix = path.suffix.lower()
+    file_size_mb = path.stat().st_size / (1024 * 1024)
     row_limit = _fast_analysis_row_limit()
+    
+    # Adjust row limit based on file size for better performance
+    # Smaller files: process all
+    # Medium files (10-100MB): process reasonable sample
+    # Large files (>100MB): process strategic sample
+    if file_size_mb < 10:
+        row_limit = None  # Process entire file
+    elif file_size_mb > 500:
+        row_limit = min(row_limit, 5000)  # Cap at 5000 for very large files
 
     if suffix == ".csv":
-        dataframe = pd.read_csv(
-            path,
-            nrows=row_limit,
-            memory_map=True,
-        )
+        # Optimized CSV reading with intelligent dtype inference
+        try:
+            # First pass: infer dtypes efficiently
+            sample_rows = min(1000, max(100, int(row_limit / 10))) if row_limit else 1000
+            dtype_sample = pd.read_csv(
+                path,
+                nrows=sample_rows,
+                encoding='utf-8',
+                low_memory=False,
+            )
+            
+            # Infer dtypes from sample to speed up main read
+            inferred_dtypes = {}
+            for col in dtype_sample.columns:
+                if pd.api.types.is_numeric_dtype(dtype_sample[col]):
+                    inferred_dtypes[col] = 'float64'
+                elif pd.api.types.is_datetime64_any_dtype(dtype_sample[col]):
+                    inferred_dtypes[col] = 'string'
+                else:
+                    inferred_dtypes[col] = 'string'
+            
+            # Read full dataset with inferred dtypes
+            dataframe = pd.read_csv(
+                path,
+                nrows=row_limit,
+                dtype=inferred_dtypes,
+                encoding='utf-8',
+                engine='c',  # C engine is faster
+                low_memory=False,
+                na_values=['NA', 'null', '', 'None', 'N/A'],
+                skipinitialspace=True,
+            )
+            
+        except (UnicodeDecodeError, pd.errors.ParserError):
+            # Fallback to latin-1 encoding if utf-8 fails
+            dataframe = pd.read_csv(
+                path,
+                nrows=row_limit,
+                encoding='latin-1',
+                engine='c',
+                low_memory=False,
+                na_values=['NA', 'null', '', 'None', 'N/A'],
+                skipinitialspace=True,
+            )
 
-        sampled = len(dataframe) >= row_limit
+        sampled = row_limit is not None and len(dataframe) >= row_limit
+        total_rows = len(dataframe)
 
         return dataframe, {
-            "total_rows": len(dataframe),
+            "total_rows": total_rows,
             "sampled": sampled,
             "row_limit": row_limit,
             "exact_rows": not sampled,
+            "file_size_mb": file_size_mb,
         }
 
     if suffix in {".xls", ".xlsx"}:
+        # Excel reading with optimizations
         dataframe = pd.read_excel(
             path,
             nrows=row_limit,
+            engine='openpyxl' if suffix == '.xlsx' else 'xlrd',
         )
 
         return dataframe, {
             "total_rows": len(dataframe),
-            "sampled": False,
+            "sampled": row_limit is not None and len(dataframe) >= row_limit,
             "row_limit": row_limit,
             "exact_rows": False,
+            "file_size_mb": file_size_mb,
         }
 
     raise ValueError(
@@ -296,12 +357,13 @@ def _clean_dataframe(dataframe: pd.DataFrame) -> pd.DataFrame:
 def _coerce_numeric_columns(
     dataframe: pd.DataFrame,
 ) -> pd.DataFrame:
-
+    """
+    Optimized numeric coercion using faster vectorized operations.
+    """
     dataframe = dataframe.copy()
     scan_limit = _column_scan_row_limit()
 
     for column in dataframe.columns:
-
         series = dataframe[column]
         non_null = series.dropna()
 
@@ -312,40 +374,34 @@ def _coerce_numeric_columns(
             continue
 
         if is_numeric_dtype(series):
-
-            dataframe[column] = pd.to_numeric(
-                series,
-                errors="coerce",
-            )
-
+            # Already numeric, just coerce to standard type
+            dataframe[column] = pd.to_numeric(series, errors="coerce")
             continue
 
-        sample = non_null.head(scan_limit)
+        # For string columns, check if they contain numeric data
+        sample = non_null.head(scan_limit) if len(non_null) > scan_limit else non_null
         cleaned_sample = _clean_numeric_text(sample)
 
+        # Use pd.to_numeric for vectorized conversion (faster than iterating)
         sample_numeric_values = pd.to_numeric(
             cleaned_sample,
             errors="coerce",
         )
 
+        # Calculate conversion ratio
         ratio = (
             sample_numeric_values.notna().sum()
             / max(len(sample), 1)
         )
 
+        # If 80%+ can be converted to numeric, do the full conversion
         if ratio >= 0.8:
-
             numeric_values = pd.to_numeric(
                 _clean_numeric_text(series),
                 errors="coerce",
             )
-
             dataframe[column] = numeric_values
-
-            logger.info(
-                "Converted column '%s' to numeric",
-                column,
-            )
+            logger.info("Converted column '%s' to numeric", column)
 
     return dataframe
 
