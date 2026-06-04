@@ -639,13 +639,13 @@ const uploadBtn = document.getElementById("uploadBtn");
 
 let selectedFile = null;
 let isUploading = false;
-const CHUNK_SIZE = 1024 * 1024 * 5; // 5MB chunks
+let uploadPending = false;
 
 /* =========================
-   OPEN FILE PICKER (Only Once)
+   OPEN FILE PICKER
 ========================= */
 dropzone.addEventListener("click", () => {
-    if (!isUploading && !selectedFile) {
+    if (!isUploading) {
         fileInput.click();
     }
 });
@@ -670,13 +670,13 @@ dropzone.addEventListener("drop", (e) => {
     dropzone.style.backgroundColor = "transparent";
     
     const files = e.dataTransfer.files;
-    if (files.length > 0) {
+    if (files.length > 0 && !isUploading) {
         handleFileSelection(files[0]);
     }
 });
 
 /* =========================
-   FILE SELECT - AUTO UPLOAD
+   FILE SELECT - NO AUTO UPLOAD (BUG FIX)
 ========================= */
 fileInput.addEventListener("change", (e) => {
     if (e.target.files.length > 0) {
@@ -685,7 +685,7 @@ fileInput.addEventListener("change", (e) => {
 });
 
 function handleFileSelection(file) {
-    if (!file) return;
+    if (!file || isUploading || uploadPending) return;
     
     // Validate file type
     const allowedTypes = ['text/csv', 'application/vnd.ms-excel', 
@@ -707,7 +707,7 @@ function handleFileSelection(file) {
     filePreview.style.display = "block";
     document.querySelector(".file-name").textContent = selectedFile.name;
     
-    // Show file size in MB for large files
+    // Show file size in MB
     const sizeMB = (selectedFile.size / (1024 * 1024)).toFixed(2);
     const sizeText = sizeMB > 1 
         ? `${sizeMB} MB`
@@ -715,52 +715,52 @@ function handleFileSelection(file) {
     
     document.querySelector(".file-size").textContent = sizeText;
     
-    // Show warning for very large files
-    if (sizeMB > 100) {
-        document.querySelector(".file-size").innerHTML += 
-            ' <span style="color: #f97316; font-weight: bold;">(Large file - may take 1-3 minutes)</span>';
-    } else if (sizeMB > 50) {
-        document.querySelector(".file-size").innerHTML += 
-            ' <span style="color: #ea580c; font-weight: bold;">(May take 30-60 seconds)</span>';
+    // Clear previous warnings
+    const sizeElement = document.querySelector(".file-size");
+    sizeElement.textContent = sizeText;
+    
+    // Show warnings for files > 20MB
+    if (sizeMB > 20) {
+        sizeElement.innerHTML += ' <span style="color: #f97316; font-weight: bold;">(May take 15-30 seconds)</span>';
     }
     
-    // Auto-upload after brief delay
+    // Enable button for manual click
     uploadBtn.disabled = false;
-    setTimeout(() => {
-        if (selectedFile && !isUploading) {
-            uploadFile();
-        }
-    }, 500);
+    uploadBtn.innerHTML = "Analyze Dataset";
 }
 
 /* =========================
-   FILE UPLOAD WITH PROGRESS
+   FILE UPLOAD (USER CLICK ONLY)
 ========================= */
-async function uploadFile() {
-    if (!selectedFile || isUploading) {
+uploadBtn.addEventListener("click", async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!selectedFile || isUploading || uploadPending) {
         return;
     }
     
+    uploadPending = true;
     isUploading = true;
     uploadBtn.disabled = true;
     fileInput.disabled = true;
+    uploadBtn.innerHTML = "Uploading...";
     
     const formData = new FormData();
     formData.append("dataset", selectedFile);
     
     try {
-        uploadBtn.innerHTML = "Uploading...";
-        
         const progressBar = document.querySelector(".upload-progress-modern");
         const progressFill = document.querySelector(".progress-fill");
         const progressText = document.querySelector(".progress-text");
         const progressHint = document.querySelector(".progress-hint");
         
         progressBar.style.display = "block";
+        progressFill.style.width = "0%";
         
-        // Show hint for large files
+        // Show hint for files > 20MB
         const sizeMB = selectedFile.size / (1024 * 1024);
-        if (sizeMB > 50) {
+        if (sizeMB > 20) {
             progressHint.style.display = "block";
         }
         
@@ -770,7 +770,7 @@ async function uploadFile() {
         xhr.upload.addEventListener("progress", (e) => {
             if (e.lengthComputable) {
                 const percentComplete = (e.loaded / e.total) * 100;
-                progressFill.style.width = percentComplete + "%";
+                progressFill.style.width = Math.min(percentComplete, 99) + "%";
                 progressText.textContent = `Uploading... ${Math.round(percentComplete)}%`;
             }
         });
@@ -778,15 +778,16 @@ async function uploadFile() {
         // Handle upload completion
         xhr.addEventListener("load", () => {
             if (xhr.status === 200 || xhr.status === 302 || xhr.status === 301) {
+                progressFill.style.width = "100%";
                 uploadBtn.innerHTML = "Processing...";
-                progressText.textContent = "Processing your data...";
+                progressText.textContent = "Processing your data (this may take a moment)...";
                 
                 try {
                     const response = JSON.parse(xhr.responseText);
                     if (response.dashboard_url) {
                         setTimeout(() => {
                             window.location.href = response.dashboard_url;
-                        }, 1000);
+                        }, 800);
                         return;
                     }
                 } catch (e) {
@@ -794,13 +795,15 @@ async function uploadFile() {
                     if (xhr.responseURL && xhr.responseURL !== window.location.href) {
                         setTimeout(() => {
                             window.location.href = xhr.responseURL;
-                        }, 1000);
+                        }, 800);
                         return;
                     }
                 }
+                
+                throw new Error("No dashboard URL received");
             }
             
-            throw new Error(`Upload failed with status ${xhr.status}`);
+            throw new Error(`Upload failed with status ${xhr.status}: ${xhr.statusText}`);
         });
         
         xhr.addEventListener("error", () => {
@@ -811,22 +814,20 @@ async function uploadFile() {
             throw new Error("Upload was cancelled");
         });
         
+        xhr.addEventListener("timeout", () => {
+            throw new Error("Upload timed out");
+        });
+        
+        xhr.timeout = 300000; // 5 minutes
         xhr.open("POST", "/upload", true);
         xhr.send(formData);
         
     } catch (error) {
         console.error(error);
-        alert("Failed to process dataset: " + error.message);
+        alert("Failed: " + error.message);
         resetUpload();
-    }
-}
-
-/* =========================
-   MANUAL UPLOAD BUTTON
-========================= */
-uploadBtn.addEventListener("click", () => {
-    if (selectedFile && !isUploading) {
-        uploadFile();
+    } finally {
+        uploadPending = false;
     }
 });
 
@@ -835,26 +836,31 @@ uploadBtn.addEventListener("click", () => {
 ========================= */
 document.querySelector(".remove-file")?.addEventListener("click", (e) => {
     e.stopPropagation();
+    e.preventDefault();
     resetFileInput();
 });
 
 function resetFileInput() {
     selectedFile = null;
     isUploading = false;
+    uploadPending = false;
     fileInput.value = "";
     fileInput.disabled = false;
     document.querySelector(".file-preview").style.display = "none";
     document.querySelector(".upload-progress-modern").style.display = "none";
+    document.querySelector(".progress-fill").style.width = "0%";
     uploadBtn.innerHTML = "Analyze Dataset";
     uploadBtn.disabled = true;
 }
 
 function resetUpload() {
     isUploading = false;
+    uploadPending = false;
     uploadBtn.innerHTML = "Try Again";
     uploadBtn.disabled = false;
     fileInput.disabled = false;
     document.querySelector(".upload-progress-modern").style.display = "none";
+    document.querySelector(".progress-fill").style.width = "0%";
 }
 </script>
 {% endblock %}
