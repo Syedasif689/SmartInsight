@@ -752,16 +752,11 @@ uploadBtn.addEventListener("click", (e) => {
     progressHint.style.display = "block";
   }
     
-  const xhr = new XMLHttpRequest();
-  xhr.timeout = 300000; // 5 minutes
+  // Implement retries with exponential backoff to survive flaky mobile networks
+  const MAX_ATTEMPTS = 3;
+  const BASE_DELAY_MS = 1000;
 
-  xhr.upload.addEventListener("progress", (event) => {
-    if (event.lengthComputable) {
-      const percentComplete = (event.loaded / event.total) * 100;
-      progressFill.style.width = Math.min(percentComplete, 99) + "%";
-      progressText.textContent = `Uploading... ${Math.round(percentComplete)}%`;
-    }
-  });
+  let attempt = 0;
 
   function failUpload(message) {
     console.error(message);
@@ -769,48 +764,85 @@ uploadBtn.addEventListener("click", (e) => {
     resetUpload();
   }
 
-  xhr.addEventListener("load", () => {
-    if (xhr.status < 200 || xhr.status >= 400) {
-      failUpload(`Server returned ${xhr.status}`);
-      return;
-    }
+  function sendAttempt() {
+    attempt += 1;
+    const xhr = new XMLHttpRequest();
+    xhr.timeout = 600000; // 10 minutes
 
-    progressFill.style.width = "100%";
-    uploadBtn.innerHTML = "Processing...";
-    progressText.textContent = "Processing your data...";
+    xhr.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable) {
+        const percentComplete = (event.loaded / event.total) * 100;
+        progressFill.style.width = Math.min(percentComplete, 99) + "%";
+        progressText.textContent = `Uploading... ${Math.round(percentComplete)}%`;
+      }
+    });
 
-    try {
-      const response = JSON.parse(xhr.responseText);
-      if (response.dashboard_url) {
-        window.location.href = response.dashboard_url;
+    xhr.addEventListener("load", () => {
+      if (xhr.status < 200 || xhr.status >= 400) {
+        // retry on server errors
+        if (attempt < MAX_ATTEMPTS) {
+          const backoff = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+          console.warn(`Upload attempt ${attempt} failed with status ${xhr.status}, retrying in ${backoff}ms`);
+          setTimeout(sendAttempt, backoff);
+          return;
+        }
+        failUpload(`Server returned ${xhr.status}`);
         return;
       }
-    } catch (err) {
-      // If response is not JSON, fall through to URL redirect logic.
-    }
 
-    if (xhr.responseURL && xhr.responseURL !== window.location.href) {
-      window.location.href = xhr.responseURL;
-      return;
-    }
+      // Success
+      progressFill.style.width = "100%";
+      uploadBtn.innerHTML = "Processing...";
+      progressText.textContent = "Processing your data...";
 
-    failUpload("No dashboard URL returned from server.");
-  });
+      try {
+        const response = JSON.parse(xhr.responseText);
+        if (response.dashboard_url) {
+          window.location.href = response.dashboard_url;
+          return;
+        }
+      } catch (err) {
+        // If response is not JSON, fall through to URL redirect logic.
+      }
 
-  xhr.addEventListener("error", () => {
-    failUpload("Network error during upload.");
-  });
+      if (xhr.responseURL && xhr.responseURL !== window.location.href) {
+        window.location.href = xhr.responseURL;
+        return;
+      }
 
-  xhr.addEventListener("abort", () => {
-    failUpload("Upload was cancelled.");
-  });
+      failUpload("No dashboard URL returned from server.");
+    });
 
-  xhr.addEventListener("timeout", () => {
-    failUpload("Upload timed out.");
-  });
+    xhr.addEventListener("error", () => {
+      if (attempt < MAX_ATTEMPTS) {
+        const backoff = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+        console.warn(`Network error on attempt ${attempt}, retrying in ${backoff}ms`);
+        setTimeout(sendAttempt, backoff);
+        return;
+      }
+      failUpload("Network error during upload.");
+    });
 
-  xhr.open("POST", "/upload", true);
-  xhr.send(formData);
+    xhr.addEventListener("abort", () => {
+      failUpload("Upload was cancelled.");
+    });
+
+    xhr.addEventListener("timeout", () => {
+      if (attempt < MAX_ATTEMPTS) {
+        const backoff = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+        console.warn(`Upload timed out on attempt ${attempt}, retrying in ${backoff}ms`);
+        setTimeout(sendAttempt, backoff);
+        return;
+      }
+      failUpload("Upload timed out.");
+    });
+
+    xhr.open("POST", "/upload", true);
+    xhr.send(formData);
+  }
+
+  // Start first attempt
+  sendAttempt();
 });
 
 /* =========================
