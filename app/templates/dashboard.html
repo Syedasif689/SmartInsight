@@ -167,7 +167,7 @@
 {% endif %}
         <div class="upload-card-modern">
           <div class="dropzone" id="dropzone">
-            <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" hidden />
+            <input type="file" id="fileInput" accept=".csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden />
             
             <div class="upload-icon">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -178,7 +178,7 @@
             
             <div class="upload-text">
               <h3>Drop your file here</h3>
-              <p>or <span class="browse-link">browse</span> from your computer</p>
+              <p>or <label for="fileInput" class="browse-link">browse</label> from your computer</p>
               <small>Supports CSV, Excel (Max {{ max_upload_mb }}MB)</small>
               <small><b>• use structured datasets for better dashboards.</b></small>
             </div>
@@ -642,15 +642,6 @@ let isUploading = false;
 let uploadPending = false;
 
 /* =========================
-   OPEN FILE PICKER
-========================= */
-dropzone.addEventListener("click", () => {
-    if (!isUploading) {
-        fileInput.click();
-    }
-});
-
-/* =========================
    DRAG & DROP SUPPORT
 ========================= */
 dropzone.addEventListener("dragover", (e) => {
@@ -681,13 +672,6 @@ dropzone.addEventListener("drop", (e) => {
 fileInput.addEventListener("change", (e) => {
     if (e.target.files.length > 0) {
         handleFileSelection(e.target.files[0]);
-    }
-});
-
-document.querySelector(".browse-link")?.addEventListener("click", (e) => {
-    e.preventDefault();
-    if (!isUploading) {
-        fileInput.click();
     }
 });
 
