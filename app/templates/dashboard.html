@@ -684,6 +684,13 @@ fileInput.addEventListener("change", (e) => {
     }
 });
 
+document.querySelector(".browse-link")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (!isUploading) {
+        fileInput.click();
+    }
+});
+
 function handleFileSelection(file) {
     if (!file || isUploading || uploadPending) return;
     
