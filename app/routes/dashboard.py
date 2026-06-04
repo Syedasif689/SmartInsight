@@ -31,7 +31,11 @@ dashboard_bp = Blueprint("dashboard", __name__)
 
 @dashboard_bp.route("/dashboard", methods=["GET"])
 def index():
-    return render_template("dashboard.html", dashboard=None)
+    return render_template(
+        "dashboard.html",
+        dashboard=None,
+        max_upload_mb=current_app.config["MAX_UPLOAD_MB"],
+    )
 
 # =========================================================
 # HISTORY PAGE
@@ -246,6 +250,7 @@ def view_dashboard(file_id: str):
         chart_data=dashboard.get("chart_data", []),
         dataset=dataset,
         file_id=file_id,
+        max_upload_mb=current_app.config["MAX_UPLOAD_MB"],
     )
 
 
@@ -497,4 +502,5 @@ def error_response(message: str, status_code: int):
         "dashboard.html",
         dashboard=None,
         error=message,
+        max_upload_mb=current_app.config["MAX_UPLOAD_MB"],
     ), status_code

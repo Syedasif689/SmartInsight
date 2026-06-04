@@ -547,6 +547,7 @@ class ModernUploader {
     this.progressText = document.querySelector('.progress-text');
     
     this.selectedFile = null;
+    this.maxUploadMB = 200;
     this.init();
   }
   
@@ -610,9 +611,9 @@ class ModernUploader {
       return;
     }
     
-    // Validate size (50MB max)
-    if (file.size > 50 * 1024 * 1024) {
-      this.showError('File size must be less than 50MB');
+    // Validate size (200MB max)
+    if (file.size > this.maxUploadMB * 1024 * 1024) {
+      this.showError(`File size must be less than ${this.maxUploadMB}MB`);
       return;
     }
     
@@ -685,18 +686,22 @@ class ModernUploader {
       // Send to server - use the correct endpoint
       const response = await fetch('/upload', {
         method: 'POST',
-        body: formData
+        body: formData,
+        headers: {
+          Accept: 'application/json',
+        },
       });
       
+      const result = await response.json().catch(() => ({}));
+
       if (response.ok) {
         this.uploadSuccess();
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
-      } else {
-        const error = await response.json();
-        this.uploadError(error.error || 'Upload failed');
+        const dashboardUrl = result.dashboard_url || window.location.href;
+        window.location.href = dashboardUrl;
+        return;
       }
+
+      this.uploadError(result.error || 'Upload failed');
       
     } catch (error) {
       console.error('Upload error:', error);

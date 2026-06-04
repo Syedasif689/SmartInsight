@@ -147,7 +147,11 @@ def create_app(config_name="default"):
     # ERROR HANDLERS
     @app.errorhandler(RequestEntityTooLarge)
     def handle_large_upload(error):
-        return render_template("dashboard.html", error="File too large"), 413
+        return render_template(
+            "dashboard.html",
+            error="File too large",
+            max_upload_mb=app.config["MAX_UPLOAD_MB"],
+        ), 413
 
     @app.errorhandler(Exception)
     def handle_error(error):
@@ -155,7 +159,11 @@ def create_app(config_name="default"):
             return error
 
         app.logger.exception("Unhandled exception")
-        return render_template("dashboard.html", error="Unexpected error"), 500
+        return render_template(
+            "dashboard.html",
+            error="Unexpected error",
+            max_upload_mb=app.config["MAX_UPLOAD_MB"],
+        ), 500
 
     return app
 
