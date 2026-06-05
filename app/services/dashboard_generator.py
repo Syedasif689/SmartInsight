@@ -68,7 +68,11 @@ def generate_dashboard_from_file(file_path: str | Path, fast: bool = False) -> d
     dataframe, dataset_info = _read_dataset(path)
     dataframe = _clean_dataframe(dataframe)
 
-    columns = detect_columns(dataframe)
+    analysis_df = dataframe
+    if fast:
+        analysis_df = dataframe.head(_fast_analysis_row_limit())
+
+    columns = detect_columns(analysis_df)
 
     numeric_columns = columns["numeric"]
     continuous_numeric_columns = columns["continuous_numeric"]
@@ -99,7 +103,7 @@ def generate_dashboard_from_file(file_path: str | Path, fast: bool = False) -> d
         "columns": columns,
 
         "kpis": _build_kpis(
-            dataframe,
+            analysis_df,
             numeric_columns,
             continuous_numeric_columns,
             categorical_columns,
@@ -109,7 +113,7 @@ def generate_dashboard_from_file(file_path: str | Path, fast: bool = False) -> d
         ),
 
         "chart_data": _build_charts(
-            dataframe,
+            analysis_df,
             numeric_columns,
             continuous_numeric_columns,
             categorical_columns,
@@ -118,7 +122,7 @@ def generate_dashboard_from_file(file_path: str | Path, fast: bool = False) -> d
         ),
 
         "insights": _build_insights(
-            dataframe,
+            analysis_df,
             numeric_columns,
             continuous_numeric_columns,
             categorical_columns,
@@ -127,11 +131,12 @@ def generate_dashboard_from_file(file_path: str | Path, fast: bool = False) -> d
         ),
 
         "summary_statistics": _build_summary_statistics(
-            dataframe,
+            analysis_df,
             numeric_columns,
+            fast=fast,
         ),
 
-        "preview": _build_preview(dataframe),
+        "preview": _build_preview(analysis_df),
     }
 
     # -----------------------------
@@ -174,13 +179,16 @@ def detect_columns(dataframe: pd.DataFrame) -> dict[str, list[str]]:
         if non_null.empty:
             continue
 
+        if len(non_null) > _column_scan_row_limit():
+            non_null = non_null.head(_column_scan_row_limit())
+
         # DATE - Use faster detection methods
         if is_datetime64_any_dtype(series):
             date_columns.append(column)
             continue
         
         # Quick date string detection (faster than full regex check)
-        if _looks_like_date(series, column):
+        if _looks_like_date(non_null, column):
             date_columns.append(column)
             continue
 
@@ -411,7 +419,8 @@ def _build_charts(
     charts = []
 
     # For fast mode, operate on a small sample to speed up calculations
-    sample_df = dataframe.head(2000) if fast else dataframe
+    sample_df = dataframe.head(1000) if fast else dataframe
+    chart_df = sample_df if fast else dataframe
 
     metric = _best_metric_column(
         sample_df,
@@ -419,7 +428,7 @@ def _build_charts(
     )
 
     category = _best_category_column(
-        dataframe,
+        sample_df,
         categorical_columns,
     )
 
@@ -460,7 +469,7 @@ def _build_charts(
     if category:
 
         pie_chart = _pie_chart(
-            dataframe,
+            chart_df,
             category,
             metric,
         )
@@ -487,7 +496,7 @@ def _build_charts(
     if metric:
 
         histogram = _histogram_chart(
-            sample_df,
+            sample_df if fast else chart_df,
             metric,
         )
 
@@ -501,7 +510,7 @@ def _build_charts(
     for column in categorical_columns[:2]:
 
         donut_chart = _donut_chart(
-            sample_df,
+            chart_df,
             column,
         )
 
@@ -1319,10 +1328,14 @@ def _format_category_label(
 def _build_summary_statistics(
     dataframe: pd.DataFrame,
     numeric_columns: list[str],
+    fast: bool = False,
 ):
 
     if not numeric_columns:
         return []
+
+    if fast and len(dataframe) > _fast_analysis_row_limit():
+        dataframe = dataframe.head(_fast_analysis_row_limit())
 
     summary = (
         dataframe[numeric_columns]
@@ -1543,6 +1556,9 @@ def _build_kpis(
     sampled=False,
     fast: bool = False,
 ):
+
+    if fast and len(dataframe) > _fast_analysis_row_limit():
+        dataframe = dataframe.head(_fast_analysis_row_limit())
 
     missing = int(dataframe.isna().sum().sum())
     row_count = total_rows or len(dataframe)

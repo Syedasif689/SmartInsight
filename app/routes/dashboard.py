@@ -260,7 +260,10 @@ def view_dashboard(file_id: str):
         except Exception:
             file_size_mb = None
 
-        fast_mode = (file_size_mb is not None and file_size_mb <= 20)
+        fast_mode = (
+            file_size_mb is not None
+            and (file_size_mb <= 20 or is_mobile_request())
+        )
 
         dashboard = generate_dashboard_from_file(file_path, fast=fast_mode)
 
@@ -526,6 +529,18 @@ def requested_file_id():
 
 def wants_json():
     return request.is_json or request.accept_mimetypes.best == "application/json"
+
+
+def is_mobile_request() -> bool:
+    user_agent = (request.user_agent.string or "").lower()
+    return any(keyword in user_agent for keyword in [
+        "mobile",
+        "iphone",
+        "ipad",
+        "android",
+        "windows phone",
+        "blackberry",
+    ])
 
 
 # =========================================================
