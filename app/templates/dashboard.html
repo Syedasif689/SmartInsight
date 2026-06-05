@@ -665,6 +665,12 @@ dropzone.addEventListener("drop", (e) => {
     }
 });
 
+dropzone.addEventListener("click", () => {
+    if (!isUploading) {
+        fileInput.click();
+    }
+});
+
 /* =========================
    FILE SELECT - NO AUTO UPLOAD (BUG FIX)
 ========================= */
@@ -838,6 +844,7 @@ uploadBtn.addEventListener("click", (e) => {
     });
 
     xhr.open("POST", "/upload", true);
+    xhr.setRequestHeader("Accept", "application/json");
     xhr.send(formData);
   }
 
