@@ -680,56 +680,57 @@ class ModernUploader {
     formData.append('dataset', this.selectedFile);
     
     try {
-      // Simulate progress
-      await this.simulateUpload();
-      
-      // Send to server - use the correct endpoint with 5 minute timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000); // 5 minutes
-      
-      const response = await fetch('/upload', {
-        method: 'POST',
-        body: formData,
-        headers: {
-          Accept: 'application/json',
-        },
-        signal: controller.signal,
+      await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/upload', true);
+        xhr.timeout = 5 * 60 * 1000; // 5 minutes
+
+        xhr.upload.addEventListener('progress', (event) => {
+          if (event.lengthComputable) {
+            const percent = Math.round((event.loaded / event.total) * 100);
+            this.updateProgress(percent);
+          }
+        });
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            const result = (() => {
+              try {
+                return JSON.parse(xhr.responseText || '{}');
+              } catch {
+                return {};
+              }
+            })();
+            this.uploadSuccess();
+            const dashboardUrl = result.dashboard_url || window.location.href;
+            window.location.href = dashboardUrl;
+            resolve();
+            return;
+          }
+
+          let errorMessage = 'Upload failed';
+
+          try {
+            const result = JSON.parse(xhr.responseText || '{}');
+            if (result.error) {
+              errorMessage = result.error;
+            }
+          } catch (_e) {}
+
+          reject(new Error(errorMessage));
+        });
+
+        xhr.addEventListener('error', () => reject(new Error('Network error during upload.')));
+        xhr.addEventListener('abort', () => reject(new Error('Upload was cancelled.')));
+        xhr.addEventListener('timeout', () => reject(new Error('Upload timed out.')));
+
+        xhr.send(formData);
       });
-      
-      clearTimeout(timeoutId);
-      const result = await response.json().catch(() => ({}));
-
-      if (response.ok) {
-        this.uploadSuccess();
-        const dashboardUrl = result.dashboard_url || window.location.href;
-        window.location.href = dashboardUrl;
-        return;
-      }
-
-      this.uploadError(result.error || 'Upload failed');
-      
     } catch (error) {
       console.error('Upload error:', error);
-      if (error.name === 'AbortError') {
-        this.uploadError('Upload took too long (timeout). Please try a smaller file.');
-      } else {
-        this.uploadError('Failed to upload file. Please try again.');
-      }
+      const message = error?.message || 'Failed to upload file. Please try again.';
+      this.uploadError(message);
     }
-  }
-  
-  simulateUpload() {
-    return new Promise((resolve) => {
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += 10;
-        this.updateProgress(progress);
-        if (progress >= 100) {
-          clearInterval(interval);
-          resolve();
-        }
-      }, 150);
-    });
   }
   
   updateProgress(percent) {

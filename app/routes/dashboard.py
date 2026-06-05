@@ -264,7 +264,7 @@ def view_dashboard(file_id: str):
         fast_mode = (
             is_mobile_request()
             or file_size_mb is None
-            or file_size_mb > 10
+            or file_size_mb > 2
         )
 
         dashboard = generate_dashboard_from_file(file_path, fast=fast_mode)
