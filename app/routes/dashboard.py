@@ -115,12 +115,13 @@ def upload_file():
             uploaded_file.filename
         )
         
-        # Get file size for better handling
-        file_size_mb = (uploaded_file.content_length or 0) / (1024 * 1024)
+        # Get file size for better handling. prefer request content length, fallback to uploaded file length
+        content_length = request.content_length or uploaded_file.content_length or 0
+        file_size_mb = content_length / (1024 * 1024)
         max_upload_mb = current_app.config["MAX_UPLOAD_MB"]
         
         # File size validation
-        if file_size_mb > max_upload_mb:
+        if content_length and file_size_mb > max_upload_mb:
             return error_response(
                 f"File size exceeds maximum ({max_upload_mb}MB). Your file is {file_size_mb:.1f}MB.",
                 413
@@ -261,8 +262,9 @@ def view_dashboard(file_id: str):
             file_size_mb = None
 
         fast_mode = (
-            file_size_mb is not None
-            and (file_size_mb <= 20 or is_mobile_request())
+            is_mobile_request()
+            or file_size_mb is None
+            or file_size_mb > 10
         )
 
         dashboard = generate_dashboard_from_file(file_path, fast=fast_mode)
@@ -390,10 +392,8 @@ def uploaded_file_path(file_id: str) -> Path:
 
 def should_check_duplicates() -> bool:
     max_bytes = current_app.config.get("DUPLICATE_CHECK_MAX_MB", 5) * 1024 * 1024
-    content_length = request.content_length
-    if content_length is None:
-        return True
-    return content_length <= max_bytes
+    content_length = request.content_length or 0
+    return content_length and content_length <= max_bytes
 
 
 # =========================================================
@@ -409,7 +409,7 @@ def hash_uploaded_file(uploaded_file) -> str:
 
 def hash_stream(stream) -> str:
     digest = hashlib.sha256()
-    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+    for chunk in iter(lambda: stream.read(4 * 1024 * 1024), b""):
         digest.update(chunk)
     return digest.hexdigest()
 

@@ -232,14 +232,14 @@ def _read_dataset(path: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
     # Aggressive optimization for files <= 20MB
     if file_size_mb <= 20:
         # For small files, reduce row limit significantly
-        row_limit = 2000
+        row_limit = 1200
     elif file_size_mb <= 50:
-        row_limit = 2500
+        row_limit = 1500
     elif file_size_mb <= 100:
-        row_limit = 3000
+        row_limit = 1800
     else:
         # Large files: very aggressive sampling
-        row_limit = min(row_limit, 3000)
+        row_limit = min(row_limit, 2000)
 
     if suffix == ".csv":
         # Ultra-fast CSV reading
@@ -254,6 +254,8 @@ def _read_dataset(path: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
                 na_values=['NA', 'null', '', 'None', 'N/A', '#N/A'],
                 skipinitialspace=True,
                 keep_default_na=False,
+                low_memory=True,
+                memory_map=True,
             )
             
             # Quick post-read dtype conversion (vectorized, very fast)
@@ -270,6 +272,8 @@ def _read_dataset(path: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
                 na_values=['NA', 'null', '', 'None', 'N/A', '#N/A'],
                 skipinitialspace=True,
                 keep_default_na=False,
+                low_memory=True,
+                memory_map=True,
             )
             dataframe = _fast_dtype_inference(dataframe)
 

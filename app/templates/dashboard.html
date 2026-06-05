@@ -671,6 +671,12 @@ dropzone.addEventListener("click", () => {
     }
 });
 
+dropzone.addEventListener("touchstart", () => {
+    if (!isUploading) {
+        fileInput.click();
+    }
+});
+
 /* =========================
    FILE SELECT - NO AUTO UPLOAD (BUG FIX)
 ========================= */
