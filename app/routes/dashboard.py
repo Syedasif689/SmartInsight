@@ -91,10 +91,17 @@ def upload_file():
         return redirect(url_for("auth.login"))
 
     current_app.logger.info("UPLOAD REQUEST RECEIVED")
+    current_app.logger.info(
+    f"User-Agent: {request.user_agent.string}"
+    )
+
+    current_app.logger.info(
+    f"Content-Length: {request.content_length}"
+    )
 
     try:
         uploaded_file = request.files.get("dataset")
-
+        
         if not uploaded_file:
             return error_response(
                 "Please choose a CSV or Excel file.",
