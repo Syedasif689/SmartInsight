@@ -57,6 +57,10 @@ def database_uri_from_env():
 
 def create_app(config_name="default"):
     app = Flask(__name__)
+
+    # Limit uploads to 25 MB
+    app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
+
     configure_logging(app)
 
     app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)

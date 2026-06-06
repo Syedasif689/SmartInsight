@@ -1,4 +1,6 @@
 import hashlib
+import json
+import time
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
@@ -85,84 +87,59 @@ def my_uploads():
 @dashboard_bp.route("/upload", methods=["POST"])
 def upload_file():
 
-    # 🔐 LOGIN CHECK
     if not session.get("logged_in"):
         return redirect(url_for("auth.login"))
 
-    # GET FILE
-    uploaded_file = request.files.get("dataset")
-
-    if not uploaded_file:
-        return error_response(
-            "Please choose a CSV or Excel file.",
-            400
-        )
-
-    if uploaded_file.filename == "":
-        return error_response(
-            "No file selected.",
-            400
-        )
-
-    if not is_allowed_file(uploaded_file.filename):
-        return error_response(
-            "Unsupported file type. Upload CSV, XLS or XLSX.",
-            400
-        )
+    current_app.logger.info("UPLOAD REQUEST RECEIVED")
 
     try:
+        uploaded_file = request.files.get("dataset")
+
+        if not uploaded_file:
+            return error_response(
+                "Please choose a CSV or Excel file.",
+                400
+            )
+
+        if uploaded_file.filename == "":
+            return error_response(
+                "No file selected.",
+                400
+            )
+
+        if not is_allowed_file(uploaded_file.filename):
+            return error_response(
+                "Unsupported file type. Upload CSV, XLS or XLSX.",
+                400
+            )
 
         original_name = secure_filename(
             uploaded_file.filename
         )
-        
-        # Get file size for better handling. prefer request content length, fallback to uploaded file length
-        content_length = request.content_length or uploaded_file.content_length or 0
+
+        content_length = (
+            request.content_length
+            or uploaded_file.content_length
+            or 0
+        )
+
         file_size_mb = content_length / (1024 * 1024)
+
         max_upload_mb = current_app.config["MAX_UPLOAD_MB"]
-        
-        # File size validation
-        if content_length and file_size_mb > max_upload_mb:
+
+        if (
+            content_length
+            and file_size_mb > max_upload_mb
+        ):
             return error_response(
-                f"File size exceeds maximum ({max_upload_mb}MB). Your file is {file_size_mb:.1f}MB.",
+                f"File size exceeds maximum ({max_upload_mb}MB).",
                 413
             )
 
         current_app.logger.info(
-            f"Upload started: {original_name} (size: {file_size_mb:.2f}MB)"
+            f"Upload started: {original_name} "
+            f"({file_size_mb:.2f}MB)"
         )
-
-        # =====================================================
-        # DUPLICATE DETECTION
-        # =====================================================
-
-        uploaded_hash = None
-        existing_file_id = None
-
-        if should_check_duplicates():
-            uploaded_hash = hash_uploaded_file(uploaded_file)
-            existing_file_id = find_existing_upload(uploaded_hash)
-
-        if existing_file_id:
-
-            dashboard_url = url_for(
-                "dashboard.view_dashboard",
-                file_id=existing_file_id
-            )
-
-            if wants_json():
-                return jsonify({
-                    "duplicate": True,
-                    "file_id": existing_file_id,
-                    "dashboard_url": dashboard_url,
-                    "message": "This file was already analyzed. Showing previous results.",
-                })
-
-            return redirect(dashboard_url)
-
-        # =====================================================
-        # SAVE NEW FILE (with streaming for large files)
-        # =====================================================
 
         unique_id = uuid4().hex
 
@@ -170,20 +147,20 @@ def upload_file():
 
         file_path = uploaded_file_path(file_id)
 
-        # Use streaming save for large files
+        save_start = time.time()
+
         uploaded_file.save(file_path)
-        
+
         current_app.logger.info(
-            f"File saved successfully: {file_id}"
+            f"File saved in {time.time() - save_start:.2f}s"
         )
 
-        # =====================================================
-        # SAVE TO MYSQL DATABASE
-        # =====================================================
-
         current_user = session.get("user")
+
         if not current_user:
-            return redirect(url_for("auth.login"))
+            return redirect(
+                url_for("auth.login")
+            )
 
         dataset = Dataset(
             filename=original_name,
@@ -195,24 +172,45 @@ def upload_file():
         db.session.add(dataset)
         db.session.commit()
 
-        # Kick off asynchronous dashboard generation so uploads return quickly
-        def _background_generate(path, fast_mode):
-            try:
-                current_app.logger.info(f"Background generation started for {path.name} (fast={fast_mode})")
-                generate_dashboard_from_file(path, fast=fast_mode)
-                current_app.logger.info(f"Background generation finished for {path.name}")
-            except Exception as bg_e:
-                current_app.logger.error(f"Background generation error for {path.name}: {bg_e}", exc_info=True)
+        current_app.logger.info(
+            "Database record created"
+        )
 
-        try:
-            bg_fast = is_mobile_request() or (file_size_mb is None) or (file_size_mb > 2)
-            thread = threading.Thread(target=_background_generate, args=(file_path, bg_fast), daemon=True)
-            thread.start()
-        except Exception:
-            # Ensure upload still succeeds even if background thread couldn't start
-            current_app.logger.exception("Failed to start background generation thread")
-        if uploaded_hash:
-            write_hash_file(file_path, uploaded_hash)
+        app = current_app._get_current_object()
+
+        def _background_generate(path, fast_mode):
+            with app.app_context():
+                try:
+                    app.logger.info(
+                        f"Background started: {path.name}"
+                    )
+
+                    generate_dashboard_from_file(
+                        path,
+                        fast=fast_mode
+                    )
+
+                    app.logger.info(
+                        f"Background finished: {path.name}"
+                    )
+
+                except Exception:
+                    app.logger.exception(
+                        f"Background failed: {path.name}"
+                    )
+
+        bg_fast = (
+            is_mobile_request()
+            or file_size_mb > 2
+        )
+
+        thread = threading.Thread(
+            target=_background_generate,
+            args=(file_path, bg_fast),
+            daemon=True
+        )
+
+        thread.start()
 
         dashboard_url = url_for(
             "dashboard.view_dashboard",
@@ -221,20 +219,26 @@ def upload_file():
 
         if wants_json():
             return jsonify({
+                "success": True,
                 "duplicate": False,
                 "file_id": file_id,
                 "dashboard_url": dashboard_url,
-                "file_size_mb": round(file_size_mb, 2),
+                "file_size_mb": round(
+                    file_size_mb,
+                    2
+                ),
+                "processing": True
             })
 
         return redirect(dashboard_url)
 
     except Exception as e:
-
-        current_app.logger.error(f"Upload failed for {original_name}: {str(e)}", exc_info=True)
+        current_app.logger.exception(
+            "Upload failed"
+        )
 
         return error_response(
-            f"Failed to process dataset file: {str(e)}",
+            f"Failed to upload file: {str(e)}",
             500
         )
 
@@ -283,8 +287,19 @@ def view_dashboard(file_id: str):
             or file_size_mb is None
             or file_size_mb > 2
         )
+        cache_path=file_path.with_name(
+            file_path.name+".json"
+        )
+        if not cache_path.exists():
+            return render_template(
+                "processing.html",
+                file_id=file_id
+            )
+        dashboard=load_dashboard_cache(
+            cache_path
+        )
 
-        dashboard = generate_dashboard_from_file(file_path, fast=fast_mode)
+        
 
         elapsed = time.time() - start_time
         current_app.logger.info(f"Dashboard generation completed in {elapsed:.2f}s for file: {safe_file_id} (fast={fast_mode})")
@@ -393,7 +408,9 @@ def upload_status(file_id: str):
 # =========================================================
 # HELPERS
 # =========================================================
-
+def load_dashboard_cache(cache_path):
+    with open(cache_path, "r", encoding="utf-8") as f:
+        return json.load(f)
 def is_allowed_file(filename: str) -> bool:
     if "." not in filename:
         return False

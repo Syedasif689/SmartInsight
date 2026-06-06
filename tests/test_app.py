@@ -158,7 +158,7 @@ def test_duplicate_upload_reuses_existing_dashboard(app, client, upload_dir):
 def test_upload_limit_is_configurable(app):
     app.config.from_object("app.config.BaseConfig")
 
-    assert app.config["MAX_CONTENT_LENGTH"] >= 200 * 1024 * 1024
+    assert app.config["MAX_CONTENT_LENGTH"] >= 25 * 1024 * 1024
 
 
 def test_hash_sidecar_round_trip(tmp_path):

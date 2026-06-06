@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Processing Dataset</title>
+
+    <script>
+        function checkStatus() {
+            fetch("/upload/status/{{ file_id }}")
+                .then(r => r.json())
+                .then(data => {
+                    if (data.ready) {
+                        window.location.href =
+                            data.dashboard_url;
+                    } else {
+                        setTimeout(
+                            checkStatus,
+                            3000
+                        );
+                    }
+                });
+        }
+
+        window.onload = checkStatus;
+    </script>
+
+</head>
+<body>
+
+    <h2>
+        Processing your dataset...
+    </h2>
+
+    <p>
+        Please wait.
+    </p>
+
+</body>
+</html>
