@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 CHART_SCHEMA_VERSION = 5
 # Optimized for fast processing of 20MB files
-DEFAULT_FAST_ANALYSIS_ROW_LIMIT = 3_000  # Reduced from 10K for speed
+DEFAULT_FAST_ANALYSIS_ROW_LIMIT = 3000  # Reduced from 10K for speed
 DEFAULT_COLUMN_SCAN_ROW_LIMIT = 500  # Reduced from 1K for speed
 
 
@@ -28,13 +28,18 @@ DEFAULT_COLUMN_SCAN_ROW_LIMIT = 500  # Reduced from 1K for speed
 # =========================================================
 
 def generate_dashboard_from_file(file_path: str | Path, fast: bool = False) -> dict[str, Any]:
-
+    """
+    Generate a dashboard from a CSV or Excel file.
+    """
     path = Path(file_path)
+    
+    # Validate file exists
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {file_path}")
 
     # -----------------------------
     # CACHE SYSTEM
     # -----------------------------
-
     in_uploads = any(parent.name == "uploads" for parent in path.resolve().parents)
 
     cache_path = (
@@ -64,13 +69,18 @@ def generate_dashboard_from_file(file_path: str | Path, fast: bool = False) -> d
     # -----------------------------
     # READ + CLEAN DATA
     # -----------------------------
+    try:
+        dataframe, dataset_info = _read_dataset(path)
+        dataframe = _clean_dataframe(dataframe)
+    except Exception as e:
+        logger.error(f"Failed to read dataset: {e}")
+        raise ValueError(f"Could not read file: {e}")
 
-    dataframe, dataset_info = _read_dataset(path)
-    dataframe = _clean_dataframe(dataframe)
-
+    # Determine analysis dataframe
     analysis_df = dataframe
     if fast:
-        analysis_df = dataframe.head(_fast_analysis_row_limit())
+        row_limit = _fast_analysis_row_limit()
+        analysis_df = dataframe.head(row_limit)
 
     columns = detect_columns(analysis_df)
 
@@ -82,7 +92,6 @@ def generate_dashboard_from_file(file_path: str | Path, fast: bool = False) -> d
     # -----------------------------
     # BUILD DASHBOARD
     # -----------------------------
-
     dashboard = {
         "title": _display_name(path.name),
         "file_id": path.name,
@@ -142,7 +151,6 @@ def generate_dashboard_from_file(file_path: str | Path, fast: bool = False) -> d
     # -----------------------------
     # SAVE CACHE
     # -----------------------------
-
     if cache_path:
         try:
             with cache_path.open("w", encoding="utf-8") as file:
@@ -177,17 +185,20 @@ def detect_columns(dataframe: pd.DataFrame) -> dict[str, list[str]]:
         non_null = series.dropna()
 
         if non_null.empty:
+            categorical_columns.append(column)  # Empty columns are categorical
             continue
 
-        if len(non_null) > _column_scan_row_limit():
-            non_null = non_null.head(_column_scan_row_limit())
+        # Limit sample size for performance
+        sample_size = _column_scan_row_limit()
+        if len(non_null) > sample_size:
+            non_null = non_null.head(sample_size)
 
         # DATE - Use faster detection methods
         if is_datetime64_any_dtype(series):
             date_columns.append(column)
             continue
         
-        # Quick date string detection (faster than full regex check)
+        # Quick date string detection
         if _looks_like_date(non_null, column):
             date_columns.append(column)
             continue
@@ -244,41 +255,40 @@ def _read_dataset(path: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
     if suffix == ".csv":
         # Ultra-fast CSV reading
         try:
-            # Direct read with minimal dtype inference
+            # First, try to read with automatic dtype detection
             dataframe = pd.read_csv(
                 path,
                 nrows=row_limit,
                 encoding='utf-8',
                 engine='c',  # C engine is fastest
-                dtype=str,  # Read as string first (faster)
-                na_values=['NA', 'null', '', 'None', 'N/A', '#N/A'],
-                skipinitialspace=True,
-                keep_default_na=False,
                 low_memory=True,
                 memory_map=True,
             )
             
-            # Quick post-read dtype conversion (vectorized, very fast)
-            dataframe = _fast_dtype_inference(dataframe)
-            
-        except (UnicodeDecodeError, pd.errors.ParserError):
+        except UnicodeDecodeError:
             # Fallback: Latin-1 encoding
             dataframe = pd.read_csv(
                 path,
                 nrows=row_limit,
                 encoding='latin-1',
                 engine='c',
-                dtype=str,
-                na_values=['NA', 'null', '', 'None', 'N/A', '#N/A'],
-                skipinitialspace=True,
-                keep_default_na=False,
                 low_memory=True,
                 memory_map=True,
             )
-            dataframe = _fast_dtype_inference(dataframe)
+        except pd.errors.EmptyDataError:
+            raise ValueError("File is empty")
+        except Exception as e:
+            raise ValueError(f"Could not parse CSV file: {e}")
 
-        sampled = row_limit is not None and len(dataframe) >= row_limit
+        # Check if we got any data
+        if dataframe.empty:
+            raise ValueError("No data rows found in CSV file")
+
+        sampled = len(dataframe) >= row_limit
         total_rows = len(dataframe)
+
+        # Convert dtypes after reading
+        dataframe = _fast_dtype_inference(dataframe)
 
         return dataframe, {
             "total_rows": total_rows,
@@ -289,22 +299,31 @@ def _read_dataset(path: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
         }
 
     if suffix in {".xls", ".xlsx"}:
-        # Excel reading (already fast)
-        dataframe = pd.read_excel(
-            path,
-            nrows=row_limit,
-        )
+        # Excel reading
+        try:
+            dataframe = pd.read_excel(
+                path,
+                nrows=row_limit,
+                engine='openpyxl' if suffix == '.xlsx' else 'xlrd',
+            )
+        except Exception as e:
+            raise ValueError(f"Could not parse Excel file: {e}")
+
+        if dataframe.empty:
+            raise ValueError("No data rows found in Excel file")
+
+        sampled = len(dataframe) >= row_limit
 
         return dataframe, {
             "total_rows": len(dataframe),
-            "sampled": row_limit is not None and len(dataframe) >= row_limit,
+            "sampled": sampled,
             "row_limit": row_limit,
-            "exact_rows": False,
+            "exact_rows": not sampled,
             "file_size_mb": file_size_mb,
         }
 
     raise ValueError(
-        "Unsupported file type. Upload CSV or Excel."
+        f"Unsupported file type: {suffix}. Upload CSV or Excel files only."
     )
 
 
@@ -324,9 +343,9 @@ def _fast_dtype_inference(dataframe: pd.DataFrame) -> pd.DataFrame:
         # Try numeric conversion on sample (not full column = faster)
         sample = non_null.head(100)
         try:
-            numeric_sample = pd.to_numeric(sample, errors='coerce')
-            # If 90%+ is numeric, convert full column
-            if numeric_sample.notna().sum() / len(sample) > 0.9:
+            # Check if sample looks numeric
+            sample_str = sample.astype(str)
+            if sample_str.str.match(r'^[\d\.,\-eE]+$').mean() > 0.8:
                 dataframe[col] = pd.to_numeric(series, errors='coerce')
         except:
             pass
@@ -334,32 +353,24 @@ def _fast_dtype_inference(dataframe: pd.DataFrame) -> pd.DataFrame:
     return dataframe
 
 
-def _fast_analysis_row_limit():
-
+def _fast_analysis_row_limit() -> int:
+    """Get the row limit for fast analysis from environment or default."""
     try:
-        return max(
-            int(os.getenv(
-                "FAST_ANALYSIS_ROW_LIMIT",
-                DEFAULT_FAST_ANALYSIS_ROW_LIMIT,
-            )),
-            1_000,
-        )
-
+        limit = os.getenv("FAST_ANALYSIS_ROW_LIMIT")
+        if limit is not None:
+            return max(int(limit), 1000)
+        return DEFAULT_FAST_ANALYSIS_ROW_LIMIT
     except (TypeError, ValueError):
         return DEFAULT_FAST_ANALYSIS_ROW_LIMIT
 
 
-def _column_scan_row_limit():
-
+def _column_scan_row_limit() -> int:
+    """Get the row limit for column scanning from environment or default."""
     try:
-        return max(
-            int(os.getenv(
-                "COLUMN_SCAN_ROW_LIMIT",
-                DEFAULT_COLUMN_SCAN_ROW_LIMIT,
-            )),
-            100,
-        )
-
+        limit = os.getenv("COLUMN_SCAN_ROW_LIMIT")
+        if limit is not None:
+            return max(int(limit), 100)
+        return DEFAULT_COLUMN_SCAN_ROW_LIMIT
     except (TypeError, ValueError):
         return DEFAULT_COLUMN_SCAN_ROW_LIMIT
 
@@ -373,10 +384,13 @@ def _clean_dataframe(dataframe: pd.DataFrame) -> pd.DataFrame:
     Minimal data cleaning for speed.
     Skips extensive coercion - relies on fast_dtype_inference.
     """
+    if dataframe.empty:
+        return dataframe
+    
     dataframe = dataframe.copy()
 
     # Clean column names
-    dataframe.columns = [str(col).strip() for col in dataframe.columns]
+    dataframe.columns = [str(col).strip().replace('\n', ' ').replace('\r', '') for col in dataframe.columns]
 
     # Drop completely empty rows
     dataframe = dataframe.dropna(how="all")
@@ -384,27 +398,20 @@ def _clean_dataframe(dataframe: pd.DataFrame) -> pd.DataFrame:
     return dataframe
 
 
-def _coerce_numeric_columns(
-    dataframe: pd.DataFrame,
-) -> pd.DataFrame:
-    """
-    Already handled in _fast_dtype_inference during read.
-    This is kept for compatibility only.
-    """
-    return dataframe
-
-
 def _clean_numeric_text(series: pd.Series) -> pd.Series:
     """Minimal numeric text cleaning for speed."""
-    return (
-        series.astype("string")
-        .str.strip()
-        .str.replace(",", "", regex=False)
-        .str.replace(r"[\$£€₹¥]", "", regex=True)
-        .str.replace("%", "", regex=False)
-        .str.replace(r"^\((.*)\)$", r"-\1", regex=True)
-        .str.strip()
-    )
+    try:
+        return (
+            series.astype("string")
+            .str.strip()
+            .str.replace(",", "", regex=False)
+            .str.replace(r"[\$£€₹¥]", "", regex=True)
+            .str.replace("%", "", regex=False)
+            .str.replace(r"^\((.*)\)$", r"-\1", regex=True)
+            .str.strip()
+        )
+    except:
+        return series
 
 
 # =========================================================
@@ -439,116 +446,93 @@ def _build_charts(
     # --------------------------------
     # LINE CHART
     # --------------------------------
-
     if date_columns and metric:
-
         line_chart = _line_chart(
             sample_df,
             date_columns[0],
             metric,
         )
-
         if line_chart:
             charts.append(line_chart)
 
     # --------------------------------
     # BAR CHART
     # --------------------------------
-
     if category and metric:
-
         bar_chart = _bar_chart(
             sample_df,
             category,
             metric,
         )
-
         if bar_chart:
             charts.append(bar_chart)
 
     # --------------------------------
     # PROFESSIONAL PIE CHART
     # --------------------------------
-
     if category:
-
         pie_chart = _pie_chart(
             chart_df,
             category,
             metric,
         )
-
         if pie_chart:
             charts.append(pie_chart)
 
     # --------------------------------
     # SCATTER CHART
     # --------------------------------
-
     scatter_chart = _scatter_chart(
         sample_df,
         continuous_numeric_columns or numeric_columns,
     )
-
     if scatter_chart:
         charts.append(scatter_chart)
 
     # --------------------------------
     # HISTOGRAM
     # --------------------------------
-
     if metric:
-
         histogram = _histogram_chart(
             sample_df if fast else chart_df,
             metric,
         )
-
         if histogram:
             charts.append(histogram)
 
     # --------------------------------
     # DONUT CHARTS
     # --------------------------------
-
     for column in categorical_columns[:2]:
-
         donut_chart = _donut_chart(
             chart_df,
             column,
         )
-
         if donut_chart:
             charts.append(donut_chart)
 
     # --------------------------------
     # FALLBACK
     # --------------------------------
-
     if not charts:
-
         charts.append({
             "id": "empty-chart",
             "type": "bar",
             "title": "No Charts Available",
             "labels": [],
             "values": [],
-            "empty_message":
-                "Upload better structured data.",
+            "empty_message": "Upload better structured data.",
         })
 
     # --------------------------------
     # REMOVE DUPLICATES
     # --------------------------------
-
     unique = []
     seen = set()
 
     for chart in charts:
-
         if chart["id"] in seen:
             continue
-
         seen.add(chart["id"])
         unique.append(chart)
 
@@ -564,9 +548,7 @@ def _line_chart(
     date_column: str,
     metric: str,
 ):
-
     try:
-
         temp = dataframe[[date_column, metric]].copy()
 
         temp[date_column] = pd.to_datetime(
@@ -579,9 +561,13 @@ def _line_chart(
             errors="coerce",
         )
 
+        temp = temp.dropna()
+        
+        if temp.empty:
+            return None
+
         grouped = (
-            temp.dropna()
-            .set_index(date_column)
+            temp.set_index(date_column)
             .sort_index()[metric]
             .resample("ME")
             .sum()
@@ -595,18 +581,16 @@ def _line_chart(
             "id": "line-chart",
             "type": "line",
             "title": f"{_titleize(metric)} Trend",
-
             "labels": [
                 date.strftime("%b %Y")
                 for date in grouped.index
             ],
-
             "values": _series_values(grouped),
-
             "empty_message": "",
         }
 
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Line chart failed: {e}")
         return None
 
 
@@ -619,9 +603,7 @@ def _bar_chart(
     category: str,
     metric: str,
 ):
-
     try:
-
         grouped = (
             dataframe.groupby(category)[metric]
             .sum()
@@ -635,21 +617,17 @@ def _bar_chart(
         return {
             "id": "bar-chart",
             "type": "bar",
-
-            "title":
-                f"{_titleize(metric)} by {_titleize(category)}",
-
+            "title": f"{_titleize(metric)} by {_titleize(category)}",
             "labels": [
                 str(label)
                 for label in grouped.index
             ],
-
             "values": _series_values(grouped),
-
             "empty_message": "",
         }
 
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Bar chart failed: {e}")
         return None
 
 
@@ -662,7 +640,6 @@ def _pie_chart(
     category: str,
     metric: str | None = None,
 ):
-
     try:
         use_metric = False
 
@@ -721,27 +698,24 @@ def _pie_chart(
         return {
             "id": f"pie-{_chart_id(category)}",
             "type": "pie",
-
             "title": (
                 f"{_titleize(metric)} Share by {_titleize(category)}"
                 if use_metric
                 else f"{_titleize(category)} Distribution"
             ),
-
             "labels": [
                 str(label)
                 for label in values.index
             ],
-
             "values": chart_values,
             "percentages": _series_percentages(chart_values),
             "total": round(total, 2),
             "value_label": _titleize(metric) if use_metric else "Records",
-
             "empty_message": "",
         }
 
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Pie chart failed: {e}")
         return None
 
 
@@ -753,9 +727,7 @@ def _donut_chart(
     dataframe: pd.DataFrame,
     category: str,
 ):
-
     try:
-
         counts = (
             dataframe[category]
             .fillna("Unknown")
@@ -768,23 +740,19 @@ def _donut_chart(
             return None
 
         return {
-            "id": f"donut-{category}",
+            "id": f"donut-{_chart_id(category)}",
             "type": "doughnut",
-
-            "title":
-                f"{_titleize(category)} Overview",
-
+            "title": f"{_titleize(category)} Overview",
             "labels": [
                 str(label)
                 for label in counts.index
             ],
-
             "values": _series_values(counts),
-
             "empty_message": "",
         }
 
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Donut chart failed: {e}")
         return None
 
 
@@ -796,7 +764,6 @@ def _scatter_chart(
     dataframe: pd.DataFrame,
     numeric_columns: list[str],
 ):
-
     pair = _best_correlation_pair(
         dataframe,
         numeric_columns,
@@ -807,26 +774,20 @@ def _scatter_chart(
 
     x_column, y_column, correlation = pair
 
-    points = (
-        dataframe[[x_column, y_column]]
-        .dropna()
-        .head(250)
-        .to_dict(orient="records")
-    )
+    points_df = dataframe[[x_column, y_column]].dropna().head(250)
+    
+    if points_df.empty:
+        return None
+
+    points = points_df.to_dict(orient="records")
 
     return {
         "id": "scatter-chart",
         "type": "scatter",
-
-        "title":
-            f"{_titleize(y_column)} vs {_titleize(x_column)}",
-
+        "title": f"{_titleize(y_column)} vs {_titleize(x_column)}",
         "x_label": _titleize(x_column),
         "y_label": _titleize(y_column),
-
-        "correlation":
-            round(float(correlation), 2),
-
+        "correlation": round(float(correlation), 2),
         "points": [
             {
                 "x": row[x_column],
@@ -834,7 +795,6 @@ def _scatter_chart(
             }
             for row in points
         ],
-
         "empty_message": "",
     }
 
@@ -847,7 +807,6 @@ def _histogram_chart(
     dataframe: pd.DataFrame,
     metric: str,
 ):
-
     values = pd.to_numeric(
         dataframe[metric],
         errors="coerce",
@@ -856,27 +815,19 @@ def _histogram_chart(
     if values.empty:
         return None
 
-    bins = pd.cut(
-        values,
-        bins=min(8, max(3, values.nunique())),
-    )
-
+    num_bins = min(8, max(3, values.nunique()))
+    bins = pd.cut(values, bins=num_bins)
     counts = bins.value_counts().sort_index()
 
     return {
         "id": "histogram-chart",
         "type": "histogram",
-
-        "title":
-            f"{_titleize(metric)} Distribution",
-
+        "title": f"{_titleize(metric)} Distribution",
         "labels": [
             str(label)
             for label in counts.index
         ],
-
         "values": _series_values(counts),
-
         "empty_message": "",
     }
 
@@ -889,14 +840,12 @@ def _best_metric_column(
     dataframe: pd.DataFrame,
     numeric_columns: list[str],
 ):
-
     if not numeric_columns:
         return None
 
     scores = []
 
     for column in numeric_columns:
-
         values = pd.to_numeric(
             dataframe[column],
             errors="coerce",
@@ -915,7 +864,6 @@ def _best_metric_column(
         return None
 
     scores.sort(reverse=True)
-
     return scores[0][2]
 
 
@@ -923,7 +871,6 @@ def _best_category_column(
     dataframe: pd.DataFrame,
     categorical_columns: list[str],
 ):
-
     if not categorical_columns:
         return None
 
@@ -931,16 +878,15 @@ def _best_category_column(
     best_score = -1
 
     for column in categorical_columns:
-
-        unique_count = dataframe[column].nunique()
-
-        if 1 < unique_count <= 12:
-
-            score = 12 - unique_count
-
-            if score > best_score:
-                best_score = score
-                best = column
+        try:
+            unique_count = dataframe[column].nunique()
+            if 1 < unique_count <= 12:
+                score = 12 - unique_count
+                if score > best_score:
+                    best_score = score
+                    best = column
+        except:
+            continue
 
     return best
 
@@ -949,36 +895,29 @@ def _best_correlation_pair(
     dataframe: pd.DataFrame,
     numeric_columns: list[str],
 ):
-
     if len(numeric_columns) < 2:
         return None
 
-    corr = (
-        dataframe[numeric_columns]
-        .apply(pd.to_numeric, errors="coerce")
-        .corr()
-    )
+    try:
+        # Convert to numeric, coercing errors
+        numeric_df = dataframe[numeric_columns].apply(pd.to_numeric, errors="coerce")
+        corr = numeric_df.corr()
+    except:
+        return None
 
     best_pair = None
     best_value = 0
 
     for i, first in enumerate(numeric_columns):
-
         for second in numeric_columns[i + 1:]:
-
-            value = corr.loc[first, second]
-
-            if pd.notna(value):
-
-                if abs(value) > abs(best_value):
-
-                    best_value = value
-
-                    best_pair = (
-                        first,
-                        second,
-                        value,
-                    )
+            try:
+                value = corr.loc[first, second]
+                if pd.notna(value):
+                    if abs(value) > abs(best_value):
+                        best_value = value
+                        best_pair = (first, second, value)
+            except:
+                continue
 
     return best_pair
 
@@ -995,9 +934,8 @@ def _build_insights(
     date_columns,
     fast: bool = False,
 ):
-
     if fast:
-        return []
+        return ["Fast mode: Enable full analysis for detailed insights."]
 
     insights = []
 
@@ -1017,7 +955,6 @@ def _build_insights(
     )
 
     data_quality = _missing_data_insight(dataframe)
-
     if data_quality:
         insights.append(data_quality)
 
@@ -1026,7 +963,6 @@ def _build_insights(
         date_columns,
         metric,
     )
-
     if trend_insight:
         insights.append(trend_insight)
 
@@ -1034,18 +970,15 @@ def _build_insights(
         dataframe,
         analysis_numeric_columns,
     )
-
     if correlation_insight:
         insights.append(correlation_insight)
 
     if category and metric:
-
         category_insight = _category_driver_insight(
             dataframe,
             category,
             metric,
         )
-
         if category_insight:
             insights.append(category_insight)
 
@@ -1053,12 +986,10 @@ def _build_insights(
         dataframe,
         metric,
     )
-
     if outlier_insight:
         insights.append(outlier_insight)
 
     if not insights:
-
         insights.append(
             "Upload structured data for better AI insights."
         )
@@ -1067,7 +998,6 @@ def _build_insights(
 
 
 def _missing_data_insight(dataframe: pd.DataFrame):
-
     total_cells = dataframe.shape[0] * dataframe.shape[1]
 
     if total_cells == 0:
@@ -1100,7 +1030,6 @@ def _trend_insight(
     date_columns: list[str],
     metric: str | None,
 ):
-
     if not date_columns or not metric:
         return None
 
@@ -1117,9 +1046,13 @@ def _trend_insight(
             errors="coerce",
         )
 
+        temp = temp.dropna()
+        
+        if temp.empty:
+            return None
+
         grouped = (
-            temp.dropna()
-            .set_index(date_columns[0])
+            temp.set_index(date_columns[0])
             .sort_index()[metric]
             .resample("ME")
             .sum()
@@ -1160,7 +1093,6 @@ def _correlation_insight(
     dataframe: pd.DataFrame,
     numeric_columns: list[str],
 ):
-
     pair = _best_correlation_pair(
         dataframe,
         numeric_columns,
@@ -1196,7 +1128,6 @@ def _category_driver_insight(
     category: str,
     metric: str,
 ):
-
     try:
         temp = dataframe[[category, metric]].copy()
 
@@ -1258,7 +1189,6 @@ def _outlier_insight(
     dataframe: pd.DataFrame,
     metric: str | None,
 ):
-
     if not metric:
         return None
 
@@ -1296,11 +1226,12 @@ def _outlier_insight(
 
 
 def _dedupe_insights(insights: list[str]):
-
     deduped = []
     seen = set()
 
     for insight in insights:
+        if not insight:
+            continue
         normalized = insight.strip().lower()
 
         if not normalized or normalized in seen:
@@ -1316,7 +1247,6 @@ def _format_category_label(
     category: str,
     value: Any,
 ):
-
     text = str(value)
 
     if text.replace(".", "", 1).isdigit():
@@ -1334,27 +1264,29 @@ def _build_summary_statistics(
     numeric_columns: list[str],
     fast: bool = False,
 ):
-
     if not numeric_columns:
         return []
 
     if fast and len(dataframe) > _fast_analysis_row_limit():
         dataframe = dataframe.head(_fast_analysis_row_limit())
 
-    summary = (
-        dataframe[numeric_columns]
-        .describe()
-        .round(2)
-        .transpose()
-        .reset_index()
-    )
+    try:
+        summary = (
+            dataframe[numeric_columns]
+            .describe()
+            .round(2)
+            .transpose()
+            .reset_index()
+        )
 
-    summary.rename(
-        columns={"index": "column"},
-        inplace=True,
-    )
+        summary.rename(
+            columns={"index": "column"},
+            inplace=True,
+        )
 
-    return summary.to_dict(orient="records")
+        return summary.to_dict(orient="records")
+    except:
+        return []
 
 
 # =========================================================
@@ -1362,7 +1294,6 @@ def _build_summary_statistics(
 # =========================================================
 
 def _build_preview(dataframe: pd.DataFrame):
-
     preview = dataframe.head(10)
 
     return {
@@ -1370,7 +1301,6 @@ def _build_preview(dataframe: pd.DataFrame):
             str(column)
             for column in preview.columns
         ],
-
         "rows": preview.to_dict(orient="records"),
     }
 
@@ -1380,7 +1310,6 @@ def _build_preview(dataframe: pd.DataFrame):
 # =========================================================
 
 def _looks_like_date(series: pd.Series, column_name: str | None = None):
-
     if is_numeric_dtype(series):
         return False
 
@@ -1393,16 +1322,8 @@ def _looks_like_date(series: pd.Series, column_name: str | None = None):
         return False
 
     with warnings.catch_warnings():
-
-        warnings.simplefilter(
-            "ignore",
-            UserWarning,
-        )
-
-        parsed = pd.to_datetime(
-            values,
-            errors="coerce",
-        )
+        warnings.simplefilter("ignore", UserWarning)
+        parsed = pd.to_datetime(values, errors="coerce")
 
     return parsed.notna().mean() >= 0.8
 
@@ -1411,7 +1332,6 @@ def _date_parse_is_worth_trying(
     values: pd.Series,
     column_name: str | None = None,
 ):
-
     name = str(column_name or "").lower()
 
     if re.search(r"\b(date|time|year|month|day|created|updated)\b", name):
@@ -1432,32 +1352,31 @@ def _date_parse_is_worth_trying(
 
 
 def _looks_like_category(series: pd.Series):
-
     values = series.dropna().head(_column_scan_row_limit())
 
     if values.empty:
         return False
 
     unique = values.nunique()
-
     unique_ratio = unique / max(len(values), 1)
 
     return 1 < unique <= 20 and unique_ratio <= 0.6
 
 
 def _series_values(series: pd.Series):
-
-    return [
-        round(float(value), 2)
-        for value in series.fillna(0).tolist()
-    ]
+    try:
+        return [
+            round(float(value), 2) if pd.notna(value) else 0.0
+            for value in series.fillna(0).tolist()
+        ]
+    except:
+        return [0.0 for _ in series]
 
 
 def _compact_top_slices(
     series: pd.Series,
     limit: int = 6,
 ):
-
     if len(series) <= limit:
         return series
 
@@ -1476,7 +1395,6 @@ def _compact_top_slices(
 
 
 def _series_percentages(values: list[float]):
-
     total = sum(values)
 
     if total <= 0:
@@ -1489,7 +1407,6 @@ def _series_percentages(values: list[float]):
 
 
 def _chart_id(text: str):
-
     slug = re.sub(
         r"[^a-z0-9]+",
         "-",
@@ -1500,29 +1417,22 @@ def _chart_id(text: str):
 
 
 def _json_default(value):
-
     try:
         return value.tolist()
-
-    except Exception:
-
+    except:
         try:
             return float(value)
-
-        except Exception:
+        except:
             return str(value)
 
 
 def _display_name(file_name: str):
-
     if "__" in file_name:
         return file_name.split("__", 1)[1]
-
     return file_name
 
 
 def _titleize(text: str):
-
     return (
         str(text)
         .replace("_", " ")
@@ -1532,22 +1442,17 @@ def _titleize(text: str):
 
 
 def _format_number(value: Any):
-
     try:
         number = float(value)
-
     except Exception:
         return str(value)
 
     if abs(number) >= 1_000_000:
         return f"{number / 1_000_000:.1f}M"
-
     if abs(number) >= 1_000:
         return f"{number / 1_000:.1f}K"
-
     if number.is_integer():
         return f"{int(number):,}"
-
     return f"{number:,.2f}"
 
 
@@ -1560,7 +1465,6 @@ def _build_kpis(
     sampled=False,
     fast: bool = False,
 ):
-
     if fast and len(dataframe) > _fast_analysis_row_limit():
         dataframe = dataframe.head(_fast_analysis_row_limit())
 
@@ -1577,13 +1481,11 @@ def _build_kpis(
                 else "Total records"
             ),
         },
-
         {
             "label": "Columns",
             "value": f"{len(dataframe.columns):,}",
             "hint": "Total columns",
         },
-
         {
             "label": "Missing",
             "value": f"{missing:,}",
@@ -1601,14 +1503,11 @@ def _build_kpis(
     )
 
     if metric:
-
         kpis.append({
             "label": f"Average {_titleize(metric)}",
-
             "value": _format_number(
                 dataframe[metric].mean()
             ),
-
             "hint": "Main metric average",
         })
 

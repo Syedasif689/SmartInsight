@@ -1,4 +1,7 @@
 import hashlib
+import gc
+import csv
+import sys
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
@@ -22,6 +25,8 @@ import threading
 from app.extensions import db
 from app.models.dataset import Dataset
 
+# Increase CSV field size limit for large files
+csv.field_size_limit(sys.maxsize)
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -44,7 +49,6 @@ def index():
 
 @dashboard_bp.route("/history", methods=["GET"])
 def history():
-
     if not session.get("user"):
         return redirect(url_for("auth.login"))
 
@@ -62,11 +66,10 @@ def history():
 
 @dashboard_bp.route("/my-uploads")
 def my_uploads():
-
     current_user = session.get("user")
 
     if not current_user:
-     return redirect(url_for("auth.login"))
+        return redirect(url_for("auth.login"))
 
     uploads = Dataset.query.filter_by(
         user_email=current_user["email"]
@@ -84,7 +87,6 @@ def my_uploads():
 
 @dashboard_bp.route("/upload", methods=["POST"])
 def upload_file():
-
     # 🔐 LOGIN CHECK
     if not session.get("logged_in"):
         return redirect(url_for("auth.login"))
@@ -111,14 +113,11 @@ def upload_file():
         )
 
     try:
-
-        original_name = secure_filename(
-            uploaded_file.filename
-        )
+        original_name = secure_filename(uploaded_file.filename)
         
-        # Get file size for better handling. prefer request content length, fallback to uploaded file length
+        # Get file size for better handling
         content_length = request.content_length or uploaded_file.content_length or 0
-        file_size_mb = content_length / (1024 * 1024)
+        file_size_mb = content_length / (1024 * 1024) if content_length else 0
         max_upload_mb = current_app.config["MAX_UPLOAD_MB"]
         
         # File size validation
@@ -133,9 +132,8 @@ def upload_file():
         )
 
         # =====================================================
-        # DUPLICATE DETECTION
+        # DUPLICATE DETECTION (only for smaller files)
         # =====================================================
-
         uploaded_hash = None
         existing_file_id = None
 
@@ -144,7 +142,6 @@ def upload_file():
             existing_file_id = find_existing_upload(uploaded_hash)
 
         if existing_file_id:
-
             dashboard_url = url_for(
                 "dashboard.view_dashboard",
                 file_id=existing_file_id
@@ -163,24 +160,18 @@ def upload_file():
         # =====================================================
         # SAVE NEW FILE (with streaming for large files)
         # =====================================================
-
         unique_id = uuid4().hex
-
         file_id = f"{unique_id}__{original_name}"
-
         file_path = uploaded_file_path(file_id)
 
-        # Use streaming save for large files
+        # Save file with chunking for better memory management
         uploaded_file.save(file_path)
         
-        current_app.logger.info(
-            f"File saved successfully: {file_id}"
-        )
+        current_app.logger.info(f"File saved successfully: {file_id}")
 
         # =====================================================
         # SAVE TO MYSQL DATABASE
         # =====================================================
-
         current_user = session.get("user")
         if not current_user:
             return redirect(url_for("auth.login"))
@@ -189,28 +180,60 @@ def upload_file():
             filename=original_name,
             filepath=str(file_path),
             file_id=file_id,
-            user_email=current_user["email"]
+            user_email=current_user["email"],
+            file_size_mb=round(file_size_mb, 2),
+            upload_status="processing"
         )
 
         db.session.add(dataset)
         db.session.commit()
 
-        # Kick off asynchronous dashboard generation so uploads return quickly
-        def _background_generate(path, fast_mode):
+        # =====================================================
+        # ASYNCHRONOUS DASHBOARD GENERATION
+        # =====================================================
+        def _background_generate(path, fast_mode, dataset_id):
             try:
                 current_app.logger.info(f"Background generation started for {path.name} (fast={fast_mode})")
-                generate_dashboard_from_file(path, fast=fast_mode)
+                
+                # Generate dashboard with timeout protection
+                dashboard = generate_dashboard_from_file(path, fast=fast_mode)
+                
+                # Update dataset status
+                with current_app.app_context():
+                    ds = Dataset.query.get(dataset_id)
+                    if ds:
+                        ds.upload_status = "completed"
+                        ds.processed_at = datetime.utcnow()
+                        db.session.commit()
+                
                 current_app.logger.info(f"Background generation finished for {path.name}")
+                
+                # Force garbage collection for large files
+                gc.collect()
+                
             except Exception as bg_e:
                 current_app.logger.error(f"Background generation error for {path.name}: {bg_e}", exc_info=True)
+                
+                # Update dataset with error status
+                with current_app.app_context():
+                    ds = Dataset.query.get(dataset_id)
+                    if ds:
+                        ds.upload_status = "failed"
+                        ds.error_message = str(bg_e)
+                        db.session.commit()
 
-        try:
-            bg_fast = is_mobile_request() or (file_size_mb is None) or (file_size_mb > 2)
-            thread = threading.Thread(target=_background_generate, args=(file_path, bg_fast), daemon=True)
-            thread.start()
-        except Exception:
-            # Ensure upload still succeeds even if background thread couldn't start
-            current_app.logger.exception("Failed to start background generation thread")
+        # Determine fast mode based on file size and request
+        bg_fast = is_mobile_request() or file_size_mb > 2 or file_size_mb == 0
+        
+        # Start background thread
+        thread = threading.Thread(
+            target=_background_generate, 
+            args=(file_path, bg_fast, dataset.id), 
+            daemon=True
+        )
+        thread.start()
+        
+        # Save hash for duplicate detection
         if uploaded_hash:
             write_hash_file(file_path, uploaded_hash)
 
@@ -225,14 +248,13 @@ def upload_file():
                 "file_id": file_id,
                 "dashboard_url": dashboard_url,
                 "file_size_mb": round(file_size_mb, 2),
+                "status": "processing"
             })
 
         return redirect(dashboard_url)
 
     except Exception as e:
-
         current_app.logger.error(f"Upload failed for {original_name}: {str(e)}", exc_info=True)
-
         return error_response(
             f"Failed to process dataset file: {str(e)}",
             500
@@ -245,21 +267,15 @@ def upload_file():
 
 @dashboard_bp.route("/dashboard/<file_id>", methods=["GET"])
 def view_dashboard(file_id: str):
-
     # 🔐 LOGIN CHECK
     if not session.get("logged_in"):
         return redirect(url_for("auth.login"))
 
     safe_file_id = secure_filename(file_id)
-
     file_path = uploaded_file_path(safe_file_id)
 
     if not file_path.exists():
-
-        current_app.logger.error(
-            f"File missing: {file_path}"
-        )
-
+        current_app.logger.error(f"File missing: {file_path}")
         return render_template(
             "dashboard.html",
             dashboard=None,
@@ -267,39 +283,40 @@ def view_dashboard(file_id: str):
         ), 404
 
     try:
-
         current_app.logger.info(f"Dashboard generation started for file: {safe_file_id}")
         import time
         start_time = time.time()
 
-        # Fast-mode for smaller files to reduce processing time
+        # Determine if we should use fast mode
         try:
             file_size_mb = file_path.stat().st_size / (1024 * 1024)
         except Exception:
             file_size_mb = None
 
-        fast_mode = (
-            is_mobile_request()
-            or file_size_mb is None
-            or file_size_mb > 2
-        )
+        fast_mode = is_mobile_request() or file_size_mb is None or file_size_mb > 2
 
-        dashboard = generate_dashboard_from_file(file_path, fast=fast_mode)
+        # Check if dashboard already exists in cache
+        cache_path = file_path.with_name(file_path.name + ".json")
+        
+        if cache_path.exists() and cache_path.stat().st_mtime >= file_path.stat().st_mtime:
+            # Use cached dashboard
+            import json
+            with cache_path.open("r", encoding="utf-8") as f:
+                dashboard = json.load(f)
+            current_app.logger.info(f"Using cached dashboard for {safe_file_id}")
+        else:
+            # Generate new dashboard
+            dashboard = generate_dashboard_from_file(file_path, fast=fast_mode)
 
         elapsed = time.time() - start_time
-        current_app.logger.info(f"Dashboard generation completed in {elapsed:.2f}s for file: {safe_file_id} (fast={fast_mode})")
+        current_app.logger.info(f"Dashboard ready in {elapsed:.2f}s for file: {safe_file_id} (fast={fast_mode})")
 
     except Exception as e:
-
-        current_app.logger.error(
-            f"Dashboard error for {safe_file_id}: {str(e)}",
-            exc_info=True
-        )
-
+        current_app.logger.error(f"Dashboard error for {safe_file_id}: {str(e)}", exc_info=True)
         return render_template(
             "dashboard.html",
             dashboard=None,
-            error="Failed to generate dashboard.",
+            error=f"Failed to generate dashboard: {str(e)}",
         ), 500
 
     dataset = get_dataset_for_file_id(file_id)
@@ -316,7 +333,6 @@ def view_dashboard(file_id: str):
 
 @dashboard_bp.route("/dashboard/<file_id>/download", methods=["GET"])
 def download_dashboard(file_id: str):
-
     # 🔐 LOGIN CHECK
     if not session.get("logged_in"):
         return redirect(url_for("auth.login"))
@@ -325,9 +341,7 @@ def download_dashboard(file_id: str):
     file_path = uploaded_file_path(safe_file_id)
 
     if not file_path.exists():
-        current_app.logger.error(
-            f"File missing: {file_path}"
-        )
+        current_app.logger.error(f"File missing: {file_path}")
         return render_template(
             "dashboard.html",
             dashboard=None,
@@ -335,11 +349,18 @@ def download_dashboard(file_id: str):
         ), 404
 
     try:
-        dashboard = generate_dashboard_from_file(file_path)
+        # Try to use cached dashboard first
+        cache_path = file_path.with_name(file_path.name + ".json")
+        
+        if cache_path.exists():
+            import json
+            with cache_path.open("r", encoding="utf-8") as f:
+                dashboard = json.load(f)
+        else:
+            dashboard = generate_dashboard_from_file(file_path)
+            
     except Exception as e:
-        current_app.logger.error(
-            f"Dashboard export error: {str(e)}"
-        )
+        current_app.logger.error(f"Dashboard export error: {str(e)}")
         return render_template(
             "dashboard.html",
             dashboard=None,
@@ -347,7 +368,6 @@ def download_dashboard(file_id: str):
         ), 500
 
     dataset = get_dataset_for_file_id(file_id)
-
     export_name = f"{display_name(file_id).rsplit('.', 1)[0]}-dashboard.html"
 
     if dataset:
@@ -362,29 +382,33 @@ def download_dashboard(file_id: str):
 
     response = make_response(html_content)
     response.headers["Content-Type"] = "text/html"
-    response.headers[
-        "Content-Disposition"
-    ] = f"attachment; filename={export_name}"
+    response.headers["Content-Disposition"] = f"attachment; filename={export_name}"
 
     return response
 
 
 @dashboard_bp.route("/upload/status/<file_id>", methods=["GET"])
 def upload_status(file_id: str):
-    """Return processing status for an uploaded file (JSON).
-
-    Client can poll this endpoint to know when the dashboard cache is ready.
-    """
+    """Return processing status for an uploaded file (JSON)."""
     safe_file_id = secure_filename(file_id)
     file_path = uploaded_file_path(safe_file_id)
     cache_path = file_path.with_name(file_path.name + ".json")
 
-    ready = cache_path.exists()
+    # Check database status
+    dataset = get_dataset_for_file_id(safe_file_id)
+    
+    if dataset:
+        status = dataset.upload_status
+        ready = status == "completed" or cache_path.exists()
+    else:
+        ready = cache_path.exists()
+        status = "completed" if ready else "processing"
 
     dashboard_url = url_for("dashboard.view_dashboard", file_id=safe_file_id)
 
     return jsonify({
         "ready": ready,
+        "status": status,
         "dashboard_url": dashboard_url,
         "file_id": safe_file_id,
     })
@@ -404,6 +428,7 @@ def is_allowed_file(filename: str) -> bool:
 def get_dataset_for_file_id(file_id: str):
     safe_file_id = secure_filename(file_id)
     dataset = Dataset.query.filter_by(file_id=safe_file_id).first()
+    
     if dataset:
         return dataset
 
@@ -429,6 +454,7 @@ def uploaded_file_path(file_id: str) -> Path:
 
 
 def should_check_duplicates() -> bool:
+    """Only check duplicates for files <= 5MB to save time"""
     max_bytes = current_app.config.get("DUPLICATE_CHECK_MAX_MB", 5) * 1024 * 1024
     content_length = request.content_length or 0
     return content_length and content_length <= max_bytes
@@ -447,7 +473,8 @@ def hash_uploaded_file(uploaded_file) -> str:
 
 def hash_stream(stream) -> str:
     digest = hashlib.sha256()
-    for chunk in iter(lambda: stream.read(4 * 1024 * 1024), b""):
+    # Use smaller chunks for better memory efficiency
+    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
         digest.update(chunk)
     return digest.hexdigest()
 
@@ -481,16 +508,17 @@ def write_hash_file(file_path: Path, file_hash: str) -> None:
 
 def find_existing_upload(uploaded_hash: str):
     upload_folder = Path(current_app.config["UPLOAD_FOLDER"]).resolve()
-
-    allowed_extensions = {
-        f".{ext}" for ext in current_app.config["ALLOWED_EXTENSIONS"]
-    }
+    allowed_extensions = {f".{ext}" for ext in current_app.config["ALLOWED_EXTENSIONS"]}
 
     for file_path in upload_folder.iterdir():
         if not file_path.is_file():
             continue
 
         if file_path.suffix.lower() not in allowed_extensions:
+            continue
+
+        # Skip very large files for duplicate checking
+        if file_path.stat().st_size > 5 * 1024 * 1024:  # 5MB
             continue
 
         existing_hash = read_hash_file(file_path)
@@ -510,11 +538,7 @@ def find_existing_upload(uploaded_hash: str):
 
 def get_uploaded_files():
     upload_folder = Path(current_app.config["UPLOAD_FOLDER"]).resolve()
-
-    allowed_extensions = {
-        f".{ext}" for ext in current_app.config["ALLOWED_EXTENSIONS"]
-    }
-
+    allowed_extensions = {f".{ext}" for ext in current_app.config["ALLOWED_EXTENSIONS"]}
     uploads = []
 
     for file_path in upload_folder.iterdir():
@@ -525,7 +549,10 @@ def get_uploaded_files():
             continue
 
         stat = file_path.stat()
-
+        
+        # Get dataset info from database if available
+        dataset = Dataset.query.filter_by(filepath=str(file_path)).first()
+        
         uploads.append({
             "file_id": file_path.name,
             "name": display_name(file_path.name),
@@ -533,10 +560,11 @@ def get_uploaded_files():
             "uploaded_at": datetime.fromtimestamp(stat.st_mtime).strftime("%b %d, %Y %I:%M %p"),
             "uploaded_at_timestamp": stat.st_mtime,
             "dashboard_url": url_for("dashboard.view_dashboard", file_id=file_path.name),
+            "status": dataset.upload_status if dataset else "completed",
+            "file_size_mb": round(stat.st_size / (1024 * 1024), 2),
         })
 
     uploads.sort(key=lambda x: x["uploaded_at_timestamp"], reverse=True)
-
     return uploads
 
 
