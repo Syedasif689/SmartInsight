@@ -100,8 +100,11 @@ def upload_file():
     )
 
     try:
+        current_app.logger.info("Inside upload route")
         uploaded_file = request.files.get("dataset")
-        
+        current_app.logger.info(
+    f"File received: {uploaded_file.filename if uploaded_file else 'NONE'}"
+)
         if not uploaded_file:
             return error_response(
                 "Please choose a CSV or Excel file.",
