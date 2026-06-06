@@ -32,6 +32,55 @@ function readJsonScript(selector, fallback) {
   }
 }
 
+// Poll server for upload processing status with exponential backoff
+function pollUploadStatus(fileId, dashboardUrl) {
+  const start = Date.now();
+  const timeoutMs = 5 * 60 * 1000; // 5 minutes
+  let attempt = 0;
+
+  return new Promise((resolve, reject) => {
+    const tick = async () => {
+      attempt += 1;
+      try {
+        const resp = await fetch(`/upload/status/${encodeURIComponent(fileId)}`, {
+          headers: { 'Accept': 'application/json' },
+        });
+        if (!resp.ok) throw new Error('Status check failed');
+        const json = await resp.json();
+        if (json.ready) {
+          window.location.href = json.dashboard_url || dashboardUrl;
+          resolve();
+          return;
+        }
+
+        // Update UI with a friendly processing message
+        const elapsed = Math.round((Date.now() - start) / 1000);
+        const text = document.querySelector('.upload-progress-modern .progress-text');
+        if (text) text.textContent = `Processing on server... (${elapsed}s)`;
+
+        if (Date.now() - start > timeoutMs) {
+          reject(new Error('Processing timed out.'));
+          return;
+        }
+
+        // Exponential backoff capped between 800ms and 3000ms
+        const wait = Math.min(800 * Math.pow(1.5, attempt), 3000);
+        setTimeout(tick, wait);
+
+      } catch (err) {
+        // Retry a few times then fail
+        if (attempt < 6 && Date.now() - start <= timeoutMs) {
+          setTimeout(tick, 1000);
+          return;
+        }
+        reject(err);
+      }
+    };
+
+    tick();
+  });
+}
+
 function readDetectedColumns() {
   const columns = readJsonScript("#detected-columns", {});
 
@@ -702,9 +751,19 @@ class ModernUploader {
               }
             })();
             this.uploadSuccess();
+            const fileId = result.file_id;
             const dashboardUrl = result.dashboard_url || window.location.href;
-            window.location.href = dashboardUrl;
-            resolve();
+
+            // If server says duplicate or the cache is already ready, redirect immediately
+            if (result.duplicate || !fileId) {
+              window.location.href = dashboardUrl;
+              resolve();
+              return;
+            }
+
+            // Start polling for processing completion
+            this.progressText.textContent = 'Processing on server...';
+            pollUploadStatus(fileId, dashboardUrl).then(() => resolve()).catch(err => reject(err));
             return;
           }
 
@@ -723,6 +782,11 @@ class ModernUploader {
         xhr.addEventListener('error', () => reject(new Error('Network error during upload.')));
         xhr.addEventListener('abort', () => reject(new Error('Upload was cancelled.')));
         xhr.addEventListener('timeout', () => reject(new Error('Upload timed out.')));
+
+        // Ask server to return JSON so we can poll for status
+        try {
+          xhr.setRequestHeader('Accept', 'application/json');
+        } catch (e) {}
 
         xhr.send(formData);
       });

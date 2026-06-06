@@ -18,6 +18,7 @@ from flask import (
 from werkzeug.utils import secure_filename
 
 from app.services.dashboard_generator import generate_dashboard_from_file
+import threading
 from app.extensions import db
 from app.models.dataset import Dataset
 
@@ -194,6 +195,22 @@ def upload_file():
         db.session.add(dataset)
         db.session.commit()
 
+        # Kick off asynchronous dashboard generation so uploads return quickly
+        def _background_generate(path, fast_mode):
+            try:
+                current_app.logger.info(f"Background generation started for {path.name} (fast={fast_mode})")
+                generate_dashboard_from_file(path, fast=fast_mode)
+                current_app.logger.info(f"Background generation finished for {path.name}")
+            except Exception as bg_e:
+                current_app.logger.error(f"Background generation error for {path.name}: {bg_e}", exc_info=True)
+
+        try:
+            bg_fast = is_mobile_request() or (file_size_mb is None) or (file_size_mb > 2)
+            thread = threading.Thread(target=_background_generate, args=(file_path, bg_fast), daemon=True)
+            thread.start()
+        except Exception:
+            # Ensure upload still succeeds even if background thread couldn't start
+            current_app.logger.exception("Failed to start background generation thread")
         if uploaded_hash:
             write_hash_file(file_path, uploaded_hash)
 
@@ -350,6 +367,27 @@ def download_dashboard(file_id: str):
     ] = f"attachment; filename={export_name}"
 
     return response
+
+
+@dashboard_bp.route("/upload/status/<file_id>", methods=["GET"])
+def upload_status(file_id: str):
+    """Return processing status for an uploaded file (JSON).
+
+    Client can poll this endpoint to know when the dashboard cache is ready.
+    """
+    safe_file_id = secure_filename(file_id)
+    file_path = uploaded_file_path(safe_file_id)
+    cache_path = file_path.with_name(file_path.name + ".json")
+
+    ready = cache_path.exists()
+
+    dashboard_url = url_for("dashboard.view_dashboard", file_id=safe_file_id)
+
+    return jsonify({
+        "ready": ready,
+        "dashboard_url": dashboard_url,
+        "file_id": safe_file_id,
+    })
 
 
 # =========================================================
